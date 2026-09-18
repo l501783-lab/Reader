@@ -1,0 +1,17 @@
+{
+  "name": "聽文件 · 文件朗讀器",
+  "short_name": "聽文件",
+  "description": "上傳 PDF 或 Word，讓手機讀給你聽。支援中文、英文、日文，可翻譯成中文，可調語速。",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#161d2e",
+  "theme_color": "#161d2e",
+  "lang": "zh-Hant",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

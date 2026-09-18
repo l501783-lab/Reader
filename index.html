@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>聽文件 · 文件朗讀器</title>
+<meta name="description" content="上傳 PDF 或 Word，讓手機讀給你聽。支援中、英、日，可翻譯成中文，可調語速。">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#161d2e">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="聽文件">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<style>
+:root{
+  --ink:#161d2e;          /* 墨藍底 */
+  --ink-2:#1e2739;        /* 面板 */
+  --ink-3:#2a3548;        /* 邊線 */
+  --paper:#ece9e1;        /* 主要文字 */
+  --paper-dim:#9aa3b5;    /* 次要文字 */
+  --vermilion:#d4452b;    /* 朱砂：主要動作 */
+  --celadon:#7fb0a6;      /* 青瓷：語言／翻譯 */
+  --gold:#d5ab63;         /* 收藏 */
+  --radius:14px;
+  --serif:"Songti TC","Songti SC","Noto Serif TC","Hiragino Mincho ProN","Yu Mincho",Georgia,"Times New Roman",serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC","PingFang TC","Hiragino Sans",Roboto,"Helvetica Neue",sans-serif;
+  --safe-b:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: light){
+  :root{
+    --ink:#eeebe3; --ink-2:#f7f5f0; --ink-3:#d9d4c8;
+    --paper:#1d2436; --paper-dim:#6b7285;
+    --vermilion:#bf3a21; --celadon:#3f7a70; --gold:#9a7526;
+  }
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:var(--ink); color:var(--paper); font-family:var(--sans);
+  font-size:16px; line-height:1.55; overscroll-behavior-y:none;
+  padding-bottom:calc(112px + var(--safe-b));
+}
+button,input,select{font-family:inherit;font-size:inherit;color:inherit}
+button{background:none;border:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--celadon);outline-offset:2px}
+.wrap{max-width:720px;margin:0 auto;padding:0 18px}
+
+/* ── 頁首 ───────────────────────────── */
+header{padding:26px 0 18px}
+h1{
+  font-family:var(--serif); font-weight:600; font-size:30px; line-height:1.15;
+  margin:0; letter-spacing:.02em;
+}
+h1 .mark{display:inline-block;width:4px;height:26px;background:var(--vermilion);vertical-align:-3px;margin-right:10px;border-radius:2px}
+header p{margin:8px 0 0 14px;color:var(--paper-dim);font-size:14px}
+
+/* ── 上傳 ───────────────────────────── */
+.dropzone{
+  margin:6px 0 22px; border:1px dashed var(--ink-3); border-radius:var(--radius);
+  background:var(--ink-2); padding:22px 18px; text-align:center;
+  transition:border-color .15s, background .15s;
+}
+.dropzone.hot{border-color:var(--vermilion);background:var(--ink-2);background:color-mix(in srgb,var(--vermilion) 8%,var(--ink-2))}
+.dropzone b{font-family:var(--serif);font-size:18px;font-weight:600;display:block;margin-bottom:4px}
+.dropzone span{color:var(--paper-dim);font-size:13px}
+.pick{
+  display:inline-block;margin-top:14px;padding:11px 22px;border-radius:999px;
+  background:var(--vermilion);color:#fff;font-weight:600;font-size:15px;
+}
+/* ── 分頁 ───────────────────────────── */
+.tabs{display:flex;gap:6px;margin:0 0 14px}
+.tabs button{
+  padding:7px 14px;border-radius:999px;font-size:14px;color:var(--paper-dim);
+  border:1px solid transparent;
+}
+.tabs button[aria-selected="true"]{color:var(--paper);border-color:var(--ink-3);background:var(--ink-2)}
+
+/* ── 書櫃 ───────────────────────────── */
+.card{
+  background:var(--ink-2);border:1px solid var(--ink-3);border-radius:var(--radius);
+  padding:14px 14px 12px;margin-bottom:10px;display:flex;gap:12px;align-items:flex-start;
+}
+.card .body{flex:1;min-width:0}
+.card h3{
+  margin:0 0 5px;font-family:var(--serif);font-size:17px;font-weight:600;line-height:1.3;
+  overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+}
+.meta{font-size:12.5px;color:var(--paper-dim);display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.tag{border:1px solid var(--ink-3);border-radius:5px;padding:1px 6px;font-size:11.5px;color:var(--celadon)}
+.bar{height:3px;background:var(--ink-3);border-radius:2px;margin-top:9px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--celadon)}
+.card .acts{display:flex;flex-direction:column;gap:4px;align-items:center}
+.iconbtn{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;font-size:18px;color:var(--paper-dim)}
+.iconbtn.on{color:var(--gold)}
+.play-sm{background:var(--vermilion);color:#fff;font-size:15px}
+.empty{color:var(--paper-dim);text-align:center;padding:34px 10px;font-size:14px;line-height:1.7}
+
+/* ── 閱讀器 ─────────────────────────── */
+#reader{display:none}
+#reader.show{display:block}
+.rtop{display:flex;align-items:center;gap:10px;padding:16px 0 6px}
+.rtop h2{flex:1;margin:0;font-family:var(--serif);font-size:19px;font-weight:600;line-height:1.3;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.back{font-size:22px;width:34px;height:34px;display:grid;place-items:center;margin-left:-6px}
+
+.opts{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 4px}
+.chip{
+  border:1px solid var(--ink-3);border-radius:999px;padding:7px 13px;font-size:13.5px;color:var(--paper-dim);
+  background:var(--ink-2);
+}
+.chip.on{color:var(--paper);border-color:var(--celadon)}
+.chip.busy{opacity:.55}
+
+.sentences{margin:14px 0 8px}
+.s{
+  padding:9px 12px 9px 14px;border-left:3px solid transparent;border-radius:0 8px 8px 0;
+  font-family:var(--serif);font-size:17.5px;line-height:1.85;color:var(--paper-dim);
+  cursor:pointer;
+}
+.s.done{color:var(--paper-dim);color:color-mix(in srgb,var(--paper) 55%,transparent)}
+.s.cur{
+  border-left-color:var(--vermilion); background:var(--ink-2);
+  color:var(--paper); font-size:19px;
+}
+.s .alt{display:block;margin-top:5px;font-family:var(--sans);font-size:13.5px;color:var(--celadon);line-height:1.6}
+.more{width:100%;padding:12px;color:var(--paper-dim);font-size:14px;border:1px solid var(--ink-3);border-radius:10px;margin:6px 0}
+
+/* ── 播放列 ─────────────────────────── */
+.player{
+  position:fixed;left:0;right:0;bottom:0;z-index:40;
+  background:var(--ink);
+  background:color-mix(in srgb,var(--ink) 92%,transparent);
+  backdrop-filter:saturate(1.4) blur(14px);-webkit-backdrop-filter:saturate(1.4) blur(14px);
+  border-top:1px solid var(--ink-3);
+  padding:10px 18px calc(10px + var(--safe-b));
+  transform:translateY(120%);transition:transform .22s ease;
+}
+.player.show{transform:none}
+.player .inner{max-width:720px;margin:0 auto}
+.ptop{display:flex;justify-content:space-between;font-size:12px;color:var(--paper-dim);margin-bottom:6px}
+.seek{width:100%;accent-color:var(--vermilion);margin:0 0 6px;height:22px}
+.ctrls{display:flex;align-items:center;justify-content:center;gap:10px}
+.ctrls button{
+  height:46px;min-width:46px;border-radius:12px;border:1px solid var(--ink-3);
+  display:grid;place-items:center;font-size:15px;color:var(--paper);background:var(--ink-2);padding:0 12px;
+}
+.ctrls .main{background:var(--vermilion);border-color:var(--vermilion);color:#fff;min-width:86px;font-weight:600;font-size:16px}
+.ctrls .rate{font-variant-numeric:tabular-nums;font-size:14px;min-width:56px}
+
+/* ── 提示 ───────────────────────────── */
+#toast{
+  position:fixed;left:50%;bottom:calc(130px + var(--safe-b));transform:translateX(-50%) translateY(10px);
+  background:var(--ink-2);border:1px solid var(--ink-3);color:var(--paper);
+  padding:10px 16px;border-radius:999px;font-size:14px;opacity:0;pointer-events:none;
+  transition:opacity .2s,transform .2s;z-index:60;max-width:90vw;text-align:center;
+}
+#toast.show{opacity:1;transform:translateX(-50%)}
+.sheet{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:70;display:none;align-items:flex-end}
+.sheet.show{display:flex}
+.sheet .panel{
+  background:var(--ink);border-top:1px solid var(--ink-3);border-radius:18px 18px 0 0;
+  width:100%;max-height:78vh;overflow:auto;padding:18px 18px calc(24px + var(--safe-b));
+}
+.sheet h4{font-family:var(--serif);font-size:18px;margin:0 0 4px}
+.sheet .hint{color:var(--paper-dim);font-size:13px;margin:0 0 14px}
+.row{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--ink-3)}
+.row:last-child{border:0}
+.row label{flex:1;font-size:14.5px}
+select{background:var(--ink-2);border:1px solid var(--ink-3);border-radius:9px;padding:9px 10px;max-width:58%}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<!-- ═══ 書櫃 ═══ -->
+<main id="shelf" class="wrap">
+  <header>
+    <h1><span class="mark"></span>聽文件</h1>
+    <p>把 PDF、Word 交給手機，讓它讀給你聽。</p>
+  </header>
+
+  <div class="dropzone" id="dz">
+    <b>加入一份文件</b>
+    <span>支援 PDF、Word（.docx）、純文字。檔案只留在這支手機裡。</span><br>
+    <label class="pick">選擇檔案<input type="file" id="file" accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" multiple hidden></label>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" data-tab="all" aria-selected="true">全部</button>
+    <button role="tab" data-tab="fav" aria-selected="false">收藏</button>
+    <button role="tab" data-tab="recent" aria-selected="false">最近閱讀</button>
+  </div>
+  <div id="list"></div>
+</main>
+
+<!-- ═══ 閱讀器 ═══ -->
+<main id="reader" class="wrap">
+  <div class="rtop">
+    <button class="back" id="back" aria-label="回到書櫃">‹</button>
+    <h2 id="rtitle"></h2>
+    <button class="iconbtn" id="rfav" aria-label="收藏">☆</button>
+  </div>
+  <div class="opts">
+    <button class="chip" id="cLang">原文</button>
+    <button class="chip" id="cTrans">翻成中文</button>
+    <button class="chip" id="cVoice">語音設定</button>
+  </div>
+  <div class="sentences" id="sents"></div>
+</main>
+
+<!-- ═══ 播放列 ═══ -->
+<div class="player" id="player">
+  <div class="inner">
+    <div class="ptop"><span id="pPos">0 / 0</span><span id="pPct">0%</span></div>
+    <input type="range" class="seek" id="seek" min="0" max="0" value="0" step="1" aria-label="朗讀進度">
+    <div class="ctrls">
+      <button id="bPrev" aria-label="上一句">⏮</button>
+      <button class="main" id="bPlay">▶ 閱讀</button>
+      <button id="bPause">⏸ 暫停</button>
+      <button id="bStop">⏹ 停止</button>
+      <button class="rate" id="bRate">1.0×</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- 語音設定 -->
+<div class="sheet" id="sheetVoice">
+  <div class="panel">
+    <h4>語音設定</h4>
+    <p class="hint">手機內建的語音清單。iPhone 可到「設定 › 輔助使用 › 朗讀內容 › 聲音」下載更自然的中文、日文語音。</p>
+    <div class="row"><label>中文</label><select id="vZh"></select></div>
+    <div class="row"><label>英文</label><select id="vEn"></select></div>
+    <div class="row"><label>日文</label><select id="vJa"></select></div>
+    <div class="row"><label>語速</label><select id="vRate">
+      <option value="0.75">0.75×</option><option value="1" selected>1×</option>
+      <option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option>
+    </select></div>
+    <div class="row"><label>同時顯示原文（翻譯模式）</label><select id="vShowSrc">
+      <option value="1">顯示</option><option value="0">不顯示</option></select></div>
+    <div class="row" style="justify-content:center;padding-top:16px">
+      <button class="chip on" id="vClose" style="padding:11px 28px">完成</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script>
+"use strict";
+/* ═══════════════════════════════════════════════
+   聽文件 — 離線文件朗讀器
+   資料全部存在瀏覽器的 IndexedDB，不會上傳到任何伺服器，
+   唯一的對外連線是「翻譯」功能（需要網路）。
+   ═══════════════════════════════════════════════ */
+
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+               (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const MAXLEN = 150;                       // 單句最長字數，避免行動裝置 TTS 截斷
+const LANG_CODE = { zh:'zh-TW', en:'en-US', ja:'ja-JP' };
+const LANG_NAME = { zh:'中文', en:'英文', ja:'日文' };
+
+/* ── 小工具 ───────────────────────────────── */
+const $  = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+let toastTimer;
+function toast(msg, ms = 2200){
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), ms);
+}
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+function fmtTime(ts){
+  if(!ts) return '尚未閱讀';
+  const d = (Date.now() - ts) / 1000;
+  if(d < 60) return '剛剛';
+  if(d < 3600) return Math.floor(d/60) + ' 分鐘前';
+  if(d < 86400) return Math.floor(d/3600) + ' 小時前';
+  if(d < 86400*7) return Math.floor(d/86400) + ' 天前';
+  return new Date(ts).toLocaleDateString('zh-TW');
+}
+function fmtDur(sec){
+  sec = Math.round(sec||0);
+  if(sec < 60) return sec + ' 秒';
+  const m = Math.floor(sec/60);
+  return m < 60 ? m + ' 分鐘' : Math.floor(m/60) + ' 小時 ' + (m%60) + ' 分';
+}
+
+/* ── 資料庫 ───────────────────────────────── */
+let db;
+function openDB(){
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('listen-doc', 1);
+    r.onupgradeneeded = e => {
+      const d = e.target.result;
+      if(!d.objectStoreNames.contains('docs')) d.createObjectStore('docs', { keyPath:'id' });
+      if(!d.objectStoreNames.contains('kv'))   d.createObjectStore('kv');
+    };
+    r.onsuccess = () => res(r.result);
+    r.onerror   = () => rej(r.error);
+  });
+}
+function tx(store, mode){ return db.transaction(store, mode).objectStore(store); }
+function dbPut(store, val, key){
+  return new Promise((res, rej) => {
+    const r = key === undefined ? tx(store,'readwrite').put(val) : tx(store,'readwrite').put(val, key);
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+}
+function dbGet(store, key){
+  return new Promise((res, rej) => {
+    const r = tx(store,'readonly').get(key);
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+}
+function dbAll(store){
+  return new Promise((res, rej) => {
+    const r = tx(store,'readonly').getAll();
+    r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error);
+  });
+}
+function dbDel(store, key){
+  return new Promise((res, rej) => {
+    const r = tx(store,'readwrite').delete(key);
+    r.onsuccess = () => res(); r.onerror = () => rej(r.error);
+  });
+}
+
+/* ── 設定 ─────────────────────────────────── */
+const DEFAULTS = { rate:1, voice:{zh:'',en:'',ja:''}, showSrc:1 };
+let settings = Object.assign({}, DEFAULTS);
+function loadSettings(){
+  try{ settings = Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem('ld-settings')||'{}')); }
+  catch(e){ settings = Object.assign({}, DEFAULTS); }
+  settings.voice = Object.assign({zh:'',en:'',ja:''}, settings.voice);
+}
+function saveSettings(){ try{ localStorage.setItem('ld-settings', JSON.stringify(settings)); }catch(e){} }
+
+/* ═══ 一、文件解析 ═══════════════════════════ */
+if(window.pdfjsLib){
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
+async function readPDF(buf, onProgress){
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  const pages = [];
+  for(let p = 1; p <= pdf.numPages; p++){
+    const page = await pdf.getPage(p);
+    const tc = await page.getTextContent();
+    let line = '', lastY = null, out = '';
+    for(const it of tc.items){
+      const y = it.transform[5];
+      if(lastY !== null && Math.abs(y - lastY) > 3){ out += line.trim() + '\n'; line = ''; }
+      line += it.str;
+      if(it.hasEOL) { out += line.trim() + '\n'; line = ''; }
+      lastY = y;
+    }
+    out += line;
+    pages.push(out);
+    onProgress && onProgress(p, pdf.numPages);
+    if(p % 5 === 0) await new Promise(r => setTimeout(r)); // 讓畫面有機會更新
+  }
+  return pages.join('\n\n');
+}
+async function readDOCX(buf){
+  const r = await mammoth.extractRawText({ arrayBuffer: buf });
+  return r.value || '';
+}
+
+/* ═══ 二、切句與語言判斷 ═════════════════════ */
+const RE_KANA  = /[\u3040-\u309F\u30A0-\u30FF]/;
+const RE_HAN   = /[\u4E00-\u9FFF\u3400-\u4DBF]/;
+const RE_LATIN = /[A-Za-z]/;
+
+function detectDocLang(text){
+  const s = text.slice(0, 20000);
+  const kana  = (s.match(/[\u3040-\u309F\u30A0-\u30FF]/g) || []).length;
+  const han   = (s.match(/[\u4E00-\u9FFF]/g) || []).length;
+  const latin = (s.match(/[A-Za-z]/g) || []).length;
+  if(kana > 8 && kana > s.length * 0.004) return 'ja';
+  if(han > latin * 0.25 && han > 8) return 'zh';
+  if(latin > 0) return 'en';
+  return 'zh';
+}
+function sentLang(s, docLang){
+  if(RE_KANA.test(s)) return 'ja';
+  const han = (s.match(RE_HAN) || []).length;
+  const lat = (s.match(RE_LATIN) || []).length;
+  if(han === 0 && lat > 0) return 'en';
+  if(han > 0) return docLang === 'ja' ? 'ja' : 'zh';
+  return docLang;
+}
+function hardWrap(s){
+  if(s.length <= MAXLEN) return [s];
+  const out = []; let buf = '';
+  for(let i = 0; i < s.length; i++){
+    buf += s[i];
+    if(buf.length >= MAXLEN){
+      let cut = -1;
+      for(let j = buf.length - 1; j > MAXLEN * 0.45; j--){
+        if('、，,；;:：）)」』 '.indexOf(buf[j]) >= 0){ cut = j; break; }
+      }
+      if(cut > 0){ out.push(buf.slice(0, cut + 1)); buf = buf.slice(cut + 1); }
+      else { out.push(buf); buf = ''; }
+    }
+  }
+  if(buf.trim()) out.push(buf);
+  return out;
+}
+function splitSentences(raw){
+  const text = String(raw || '')
+    .replace(/\r/g, '')
+    .replace(/\u00AD/g, '')
+    .replace(/[ \t]{2,}/g, ' ');
+  const paras = text.split(/\n+/).map(p => p.trim()).filter(p => p.length);
+  const ENDERS = '。．！？!?；;…〜';
+  const CLOSERS = '」』”’）)】》"\'';
+  const out = [];
+  const push = s => { s = s.trim(); if(s) hardWrap(s).forEach(x => { if(x.trim()) out.push(x.trim()); }); };
+  for(const p of paras){
+    let buf = '';
+    for(let i = 0; i < p.length; i++){
+      const ch = p[i]; buf += ch;
+      let isEnd = ENDERS.indexOf(ch) >= 0;
+      if(!isEnd && ch === '.'){
+        const nxt = p[i+1] || ' ';
+        const prv = p[i-1] || ' ';
+        isEnd = /[\s]/.test(nxt) && !/\d/.test(prv) && !/^[a-z]/.test(p[i+2] || '');
+      }
+      if(isEnd){
+        while(i + 1 < p.length && CLOSERS.indexOf(p[i+1]) >= 0) buf += p[++i];
+        push(buf); buf = '';
+      }
+    }
+    push(buf);
+  }
+  return out.length ? out : (text.trim() ? [text.trim().slice(0, MAXLEN)] : []);
+}
+
+/* ═══ 三、語音 ═══════════════════════════════ */
+let voices = [];
+function refreshVoices(){
+  voices = (window.speechSynthesis && speechSynthesis.getVoices()) || [];
+  if(voices.length) fillVoiceSelects();
+}
+function pickVoice(lang){
+  const saved = settings.voice[lang];
+  if(saved){ const v = voices.find(v => v.voiceURI === saved); if(v) return v; }
+  const prefs = { zh:['zh-tw','zh-hk','zh-cn','zh','cmn'], en:['en-us','en-gb','en'], ja:['ja-jp','ja'] }[lang] || [];
+  for(const p of prefs){
+    const v = voices.find(v => (v.lang || '').replace('_','-').toLowerCase().indexOf(p) === 0);
+    if(v) return v;
+  }
+  return null;
+}
+function fillVoiceSelects(){
+  [['zh','#vZh'],['en','#vEn'],['ja','#vJa']].forEach(([lang, sel]) => {
+    const el = $(sel); if(!el) return;
+    const prefix = { zh:['zh','cmn','yue'], en:['en'], ja:['ja'] }[lang];
+    const list = voices.filter(v => prefix.some(p => (v.lang||'').toLowerCase().indexOf(p) === 0));
+    el.innerHTML = '<option value="">自動選擇</option>' +
+      list.map(v => `<option value="${v.voiceURI}">${v.name} (${v.lang})</option>`).join('');
+    el.value = settings.voice[lang] || '';
+    if(!list.length) el.innerHTML = '<option value="">這支手機沒有'+LANG_NAME[lang]+'語音</option>';
+  });
+  $('#vRate').value = String(settings.rate);
+  $('#vShowSrc').value = String(settings.showSrc);
+}
+if(window.speechSynthesis){
+  refreshVoices();
+  speechSynthesis.onvoiceschanged = refreshVoices;
+  setTimeout(refreshVoices, 400);
+  setTimeout(refreshVoices, 1500);
+}
+
+/* ═══ 四、播放引擎 ═══════════════════════════ */
+const P = { doc:null, idx:0, playing:false, paused:false, mode:'original', win:[0,0], t0:0 };
+let keepAlive = null, saveCount = 0, gen = 0;
+
+// 有些瀏覽器 cancel() 之後會補送 onend，會害下一句被跳過或重讀一次。
+// 每次朗讀給一個編號，只有最新編號的回呼算數。
+function hardCancel(){ gen++; try{ speechSynthesis.cancel(); }catch(e){} }
+
+function items(){
+  const d = P.doc; if(!d) return [];
+  if(P.mode === 'translated' && d.translation && d.translation.length === d.sentences.length){
+    return d.translation.map((t, i) => ({ text:t || d.sentences[i], lang:'zh', src:d.sentences[i] }));
+  }
+  return d.sentences.map((s, i) => ({ text:s, lang:d.langs[i], src:null }));
+}
+function total(){ return P.doc ? P.doc.sentences.length : 0; }
+
+function unlockAudio(){
+  // iOS 必須在使用者手勢中先呼叫一次 speak()，之後才能由程式連續朗讀
+  try{
+    const u = new SpeechSynthesisUtterance(' ');
+    u.volume = 0; u.rate = 2;
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+function play(fromIdx){
+  if(!P.doc) return;
+  if(!window.speechSynthesis){ toast('這個瀏覽器不支援語音朗讀'); return; }
+  if(typeof fromIdx === 'number') P.idx = Math.max(0, Math.min(fromIdx, total() - 1));
+  if(P.idx >= total()) P.idx = 0;
+  hardCancel();
+  if(!P.playing) unlockAudio();
+  P.playing = true; P.paused = false; P.t0 = Date.now();
+  startKeepAlive();
+  speakAt(P.idx);
+  syncButtons();
+}
+function speakAt(i){
+  const list = items();
+  if(i >= list.length){ finish(); return; }
+  const it = list[i];
+  const myGen = ++gen;
+  const u = new SpeechSynthesisUtterance(it.text);
+  const v = pickVoice(it.lang);
+  if(v) u.voice = v;
+  u.lang = v ? v.lang : (LANG_CODE[it.lang] || 'zh-TW');
+  u.rate = settings.rate; u.pitch = 1; u.volume = 1;
+  u.onend = () => {
+    if(myGen !== gen || !P.playing || P.paused) return;
+    P.idx = i + 1;
+    bumpProgress();
+    if(P.idx >= list.length){ finish(); return; }
+    highlight(P.idx);
+    speakAt(P.idx);
+  };
+  u.onerror = e => {
+    const err = e && e.error;
+    if(myGen !== gen || err === 'interrupted' || err === 'canceled') return;
+    if(!P.playing || P.paused) return;
+    P.idx = i + 1;                       // 跳過壞掉的一句，繼續往下
+    if(P.idx >= list.length){ finish(); return; }
+    highlight(P.idx); speakAt(P.idx);
+  };
+  speechSynthesis.speak(u);
+  highlight(i);
+}
+function pause(){
+  if(!P.playing) return;
+  P.paused = true;
+  try{ speechSynthesis.pause(); }catch(e){}
+  // 少數 Android 瀏覽器沒有真正的 pause，這時只能中斷，繼續時從這一句頭再讀
+  setTimeout(() => {
+    if(P.paused && !speechSynthesis.paused && speechSynthesis.speaking) hardCancel();
+  }, 350);
+  stopKeepAlive(); accumulateTime(); saveProgress(true);
+  syncButtons();
+}
+function resume(){
+  if(!P.doc) return;
+  if(!P.paused){ play(); return; }
+  P.paused = false; P.playing = true; P.t0 = Date.now(); startKeepAlive();
+  let resumed = false;
+  try{ speechSynthesis.resume(); }catch(e){}
+  setTimeout(() => {
+    if(!P.playing || P.paused) return;
+    if(!speechSynthesis.speaking){ hardCancel(); speakAt(P.idx); }  // 後備：從這一句頭重讀
+  }, 320);
+  syncButtons();
+}
+function stop(){
+  P.playing = false; P.paused = false;
+  hardCancel();
+  stopKeepAlive(); accumulateTime(); saveProgress(true);
+  syncButtons();
+}
+function finish(){
+  P.playing = false; P.paused = false; P.idx = total();
+  hardCancel();
+  stopKeepAlive(); accumulateTime();
+  if(P.doc) P.doc.finished = true;
+  saveProgress(true); syncButtons(); updateSeek();
+  toast('讀完了');
+  P.idx = total() - 1;
+}
+function jump(i){
+  const n = total(); if(!n) return;
+  P.idx = Math.max(0, Math.min(i, n - 1));
+  highlight(P.idx); updateSeek();
+  if(P.playing && !P.paused){ hardCancel(); speakAt(P.idx); }
+  else { if(P.paused) hardCancel(); saveProgress(true); }
+}
+function startKeepAlive(){
+  // Chrome/Android 約 15 秒會自己停掉，靠 pause+resume 續命；iOS 不需要也不適用
+  stopKeepAlive();
+  if(IS_IOS) return;
+  keepAlive = setInterval(() => {
+    if(P.playing && !P.paused && speechSynthesis.speaking){
+      try{ speechSynthesis.pause(); speechSynthesis.resume(); }catch(e){}
+    }
+  }, 9000);
+}
+function stopKeepAlive(){ if(keepAlive){ clearInterval(keepAlive); keepAlive = null; } }
+function accumulateTime(){
+  if(P.doc && P.t0){ P.doc.seconds = (P.doc.seconds || 0) + (Date.now() - P.t0) / 1000; P.t0 = 0; }
+}
+function bumpProgress(){
+  updateSeek();
+  if(++saveCount % 4 === 0) saveProgress(false);
+}
+async function saveProgress(force){
+  if(!P.doc) return;
+  P.doc.cursor = P.idx;
+  P.doc.lastReadAt = Date.now();
+  if(P.t0){ P.doc.seconds = (P.doc.seconds || 0) + (Date.now() - P.t0)/1000; P.t0 = Date.now(); }
+  try{ await dbPut('docs', P.doc); }catch(e){}
+}
+
+/* ═══ 五、翻譯 ═══════════════════════════════ */
+async function gtx(text, tl){
+  const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=' +
+              tl + '&dt=t&q=' + encodeURIComponent(text);
+  const r = await fetch(url);
+  if(!r.ok) throw new Error('gtx ' + r.status);
+  const j = await r.json();
+  return (j[0] || []).map(x => x[0]).join('');
+}
+async function mymemory(text, sl, tl){
+  const r = await fetch('https://api.mymemory.translated.net/get?q=' +
+            encodeURIComponent(text) + '&langpair=' + sl + '|' + tl);
+  if(!r.ok) throw new Error('mm ' + r.status);
+  const j = await r.json();
+  const t = j && j.responseData && j.responseData.translatedText;
+  if(!t) throw new Error('mm empty');
+  return t;
+}
+async function translateOne(text, srcLang){
+  try{ return await gtx(text, 'zh-TW'); }
+  catch(e){
+    return await mymemory(text.slice(0, 480), srcLang === 'ja' ? 'ja' : 'en', 'zh-TW');
+  }
+}
+let transAbort = false;
+async function translateDoc(doc, onProgress){
+  const n = doc.sentences.length;
+  const res = (doc.translation && doc.translation.length === n) ? doc.translation.slice() : new Array(n).fill('');
+  const todo = [];
+  for(let i = 0; i < n; i++){
+    if(res[i]) continue;
+    if(doc.langs[i] === 'zh'){ res[i] = doc.sentences[i]; continue; }
+    todo.push(i);
+  }
+  let done = n - todo.length;
+  onProgress(done, n);
+  for(let k = 0; k < todo.length; ){
+    if(transAbort) break;
+    // 合併成一批，減少請求次數
+    const batch = []; let chars = 0;
+    while(k < todo.length && chars < 900 && batch.length < 12){
+      const i = todo[k]; batch.push(i); chars += doc.sentences[i].length + 1; k++;
+    }
+    const srcLang = doc.langs[batch[0]] === 'ja' ? 'ja' : 'en';
+    let ok = false;
+    try{
+      const joined = batch.map(i => doc.sentences[i]).join('\n');
+      const out = await translateOne(joined, srcLang);
+      const lines = out.split('\n').map(s => s.trim()).filter(s => s.length);
+      if(lines.length === batch.length){ batch.forEach((i, j) => res[i] = lines[j]); ok = true; }
+    }catch(e){ /* 落到逐句 */ }
+    if(!ok){
+      for(const i of batch){
+        if(transAbort) break;
+        try{ res[i] = await translateOne(doc.sentences[i], srcLang); }
+        catch(e){ res[i] = doc.sentences[i]; }
+        await sleep(120);
+      }
+    }
+    done += batch.length;
+    onProgress(Math.min(done, n), n);
+    doc.translation = res;
+    if(done % 60 < batch.length) { try{ await dbPut('docs', doc); }catch(e){} }
+    await sleep(140);
+  }
+  doc.translation = res;
+  doc.translatedAt = Date.now();
+  try{ await dbPut('docs', doc); }catch(e){}
+  return res;
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ═══ 六、匯入檔案 ═══════════════════════════ */
+async function importFiles(fileList){
+  for(const f of Array.from(fileList)){
+    const ext = (f.name.split('.').pop() || '').toLowerCase();
+    try{
+      toast('讀取中：' + f.name, 60000);
+      let text = '';
+      if(ext === 'pdf'){
+        const buf = await f.arrayBuffer();
+        text = await readPDF(buf, (p, n) => toast(`解析 PDF ${p}/${n} 頁`, 60000));
+      }else if(ext === 'docx'){
+        text = await readDOCX(await f.arrayBuffer());
+      }else if(ext === 'doc'){
+        toast('舊版 .doc 無法直接讀取，請先另存成 .docx 或 PDF', 4000); continue;
+      }else{
+        text = await f.text();
+      }
+      text = (text || '').trim();
+      if(!text || text.length < 8){
+        toast('這份檔案抓不到文字，可能是掃描檔（圖片）。需要先做 OCR。', 5000); continue;
+      }
+      const sentences = splitSentences(text);
+      if(!sentences.length){ toast('沒有可朗讀的內容', 3000); continue; }
+      const lang = detectDocLang(text);
+      const doc = {
+        id: uid(), name: f.name.replace(/\.[^.]+$/, ''), ext,
+        size: f.size, addedAt: Date.now(),
+        sentences, langs: sentences.map(s => sentLang(s, lang)),
+        lang, chars: text.length,
+        cursor: 0, favorite: false, lastReadAt: 0, seconds: 0,
+        translation: null, finished: false
+      };
+      await dbPut('docs', doc);
+      toast('已加入：' + doc.name, 2000);
+    }catch(err){
+      console.error(err);
+      toast('讀取失敗：' + f.name, 3500);
+    }
+  }
+  render();
+}
+
+/* ═══ 七、書櫃畫面 ═══════════════════════════ */
+let tab = 'all';
+let allDocs = [];
+async function render(){
+  allDocs = await dbAll('docs');
+  let list = allDocs.slice();
+  if(tab === 'fav') list = list.filter(d => d.favorite);
+  if(tab === 'recent') list = list.filter(d => d.lastReadAt).sort((a,b) => b.lastReadAt - a.lastReadAt);
+  else list.sort((a,b) => b.addedAt - a.addedAt);
+
+  const el = $('#list');
+  if(!list.length){
+    el.innerHTML = '<div class="empty">' +
+      (tab === 'fav' ? '還沒有收藏的文件。在文件右邊點 ☆ 就能收藏。'
+       : tab === 'recent' ? '還沒有閱讀紀錄。挑一份文件開始聽吧。'
+       : '書櫃是空的。<br>上面選一份 PDF 或 Word，它會一直留在這裡。') + '</div>';
+    return;
+  }
+  el.innerHTML = list.map(d => {
+    const pct = d.sentences.length ? Math.round((d.cursor / d.sentences.length) * 100) : 0;
+    return `<article class="card" data-id="${d.id}">
+      <div class="body" data-open="1">
+        <h3>${esc(d.name)}</h3>
+        <div class="meta">
+          <span class="tag">${LANG_NAME[d.lang] || d.lang}</span>
+          <span>${d.ext.toUpperCase()}</span>
+          <span>${d.sentences.length} 句</span>
+          <span>${fmtTime(d.lastReadAt)}</span>
+          ${d.seconds > 30 ? '<span>已聽 ' + fmtDur(d.seconds) + '</span>' : ''}
+          ${d.translation ? '<span class="tag">已翻譯</span>' : ''}
+        </div>
+        <div class="bar"><i style="width:${pct}%"></i></div>
+      </div>
+      <div class="acts">
+        <button class="iconbtn play-sm" data-act="play" aria-label="開始閱讀">▶</button>
+        <button class="iconbtn ${d.favorite ? 'on' : ''}" data-act="fav" aria-label="收藏">${d.favorite ? '★' : '☆'}</button>
+        <button class="iconbtn" data-act="del" aria-label="刪除">🗑</button>
+      </div>
+    </article>`;
+  }).join('');
+}
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+$('#list').addEventListener('click', async e => {
+  const card = e.target.closest('.card'); if(!card) return;
+  const id = card.dataset.id;
+  const doc = allDocs.find(d => d.id === id); if(!doc) return;
+  const act = e.target.closest('[data-act]');
+  if(act){
+    const a = act.dataset.act;
+    if(a === 'fav'){ doc.favorite = !doc.favorite; await dbPut('docs', doc); render(); return; }
+    if(a === 'del'){
+      if(confirm('刪除「' + doc.name + '」？閱讀紀錄也會一起消失。')){
+        if(P.doc && P.doc.id === id){ stop(); closeReader(); }
+        await dbDel('docs', id); render();
+      }
+      return;
+    }
+    if(a === 'play'){ openReader(doc, true); return; }
+  }
+  if(e.target.closest('[data-open]')) openReader(doc, false);
+});
+
+$$('.tabs button').forEach(b => b.addEventListener('click', () => {
+  $$('.tabs button').forEach(x => x.setAttribute('aria-selected', 'false'));
+  b.setAttribute('aria-selected', 'true');
+  tab = b.dataset.tab; render();
+}));
+
+/* ═══ 八、閱讀器畫面 ═════════════════════════ */
+function openReader(doc, autoplay){
+  if(P.doc && P.doc.id !== doc.id) stop();
+  P.doc = doc;
+  P.idx = Math.min(doc.cursor || 0, doc.sentences.length - 1);
+  P.mode = 'original';
+  $('#shelf').style.display = 'none';
+  $('#reader').classList.add('show');
+  $('#rtitle').textContent = doc.name;
+  $('#rfav').textContent = doc.favorite ? '★' : '☆';
+  $('#rfav').classList.toggle('on', !!doc.favorite);
+  $('#cLang').textContent = '原文（' + (LANG_NAME[doc.lang] || doc.lang) + '）';
+  $('#cLang').classList.add('on');
+  $('#cTrans').classList.remove('on');
+  $('#cTrans').textContent = doc.translation ? '中文翻譯' : '翻成中文';
+  $('#cTrans').style.display = doc.lang === 'zh' ? 'none' : '';
+  $('#player').classList.add('show');
+  $('#seek').max = String(Math.max(0, doc.sentences.length - 1));
+  renderSentences(true);
+  updateSeek(); syncButtons();
+  window.scrollTo(0, 0);
+  if(autoplay) play(P.idx);
+}
+function closeReader(){
+  $('#reader').classList.remove('show');
+  $('#shelf').style.display = '';
+  render();
+}
+$('#back').addEventListener('click', () => { saveProgress(true); closeReader(); });
+$('#rfav').addEventListener('click', async () => {
+  if(!P.doc) return;
+  P.doc.favorite = !P.doc.favorite;
+  $('#rfav').textContent = P.doc.favorite ? '★' : '☆';
+  $('#rfav').classList.toggle('on', P.doc.favorite);
+  await dbPut('docs', P.doc);
+});
+
+/* 只畫游標附近的句子，長文件也不會卡 */
+const WIN = 220;
+function renderSentences(reset){
+  const list = items(); const n = list.length;
+  let [a, b] = P.win;
+  if(reset || P.idx < a + 20 || P.idx > b - 20){
+    a = Math.max(0, P.idx - Math.floor(WIN / 2));
+    b = Math.min(n, a + WIN);
+    a = Math.max(0, b - WIN);
+    P.win = [a, b];
+  }
+  const showSrc = P.mode === 'translated' && Number(settings.showSrc);
+  let html = a > 0 ? `<button class="more" data-more="up">▲ 往前 ${Math.min(WIN, a)} 句</button>` : '';
+  for(let i = a; i < b; i++){
+    const it = list[i];
+    html += `<div class="s ${i === P.idx ? 'cur' : (i < P.idx ? 'done' : '')}" data-i="${i}">${esc(it.text)}` +
+            (showSrc && it.src ? `<span class="alt">${esc(it.src)}</span>` : '') + '</div>';
+  }
+  if(b < n) html += `<button class="more" data-more="down">▼ 再讀 ${Math.min(WIN, n - b)} 句</button>`;
+  $('#sents').innerHTML = html;
+}
+$('#sents').addEventListener('click', e => {
+  const more = e.target.closest('[data-more]');
+  if(more){
+    const n = items().length;
+    let [a, b] = P.win;
+    if(more.dataset.more === 'up'){ a = Math.max(0, a - WIN); b = Math.min(n, a + WIN); }
+    else { b = Math.min(n, b + WIN); a = Math.max(0, b - WIN); }
+    P.win = [a, b]; renderSentences(false);
+    return;
+  }
+  const s = e.target.closest('.s');
+  if(s) jump(Number(s.dataset.i));
+});
+function highlight(i){
+  const [a, b] = P.win;
+  if(i < a + 10 || i >= b - 10){ renderSentences(true); }
+  else{
+    const prev = $('#sents .s.cur');
+    if(prev){ prev.classList.remove('cur'); prev.classList.add('done'); }
+    const el = $(`#sents .s[data-i="${i}"]`);
+    if(el){ el.classList.add('cur'); el.classList.remove('done'); }
+  }
+  const el = $(`#sents .s[data-i="${i}"]`);
+  if(el){
+    const r = el.getBoundingClientRect();
+    const h = window.innerHeight;
+    if(r.top < 80 || r.bottom > h - 160){
+      window.scrollBy({ top: r.top - h * 0.36, behavior: 'smooth' });
+    }
+  }
+  updateSeek();
+}
+function updateSeek(){
+  const n = total();
+  $('#pPos').textContent = (Math.min(P.idx + 1, n)) + ' / ' + n;
+  $('#pPct').textContent = n ? Math.round(((P.idx) / n) * 100) + '%' : '0%';
+  const sk = $('#seek'); sk.max = String(Math.max(0, n - 1)); sk.value = String(Math.min(P.idx, n - 1));
+}
+function syncButtons(){
+  const b = $('#bPlay');
+  if(P.playing && !P.paused){ b.innerHTML = '▶ 閱讀中'; b.style.opacity = .75; }
+  else { b.innerHTML = P.paused ? '▶ 繼續' : '▶ 閱讀'; b.style.opacity = 1; }
+  $('#bRate').textContent = settings.rate.toFixed(2).replace(/0$/,'').replace(/\.$/,'') + '×';
+}
+
+/* ═══ 九、播放列 ═════════════════════════════ */
+$('#bPlay').addEventListener('click', () => { if(P.paused) resume(); else if(!P.playing) play(); });
+$('#bPause').addEventListener('click', () => { if(P.playing && !P.paused) pause(); else if(P.paused) resume(); });
+$('#bStop').addEventListener('click', stop);
+$('#bPrev').addEventListener('click', () => jump(P.idx - 1));
+$('#seek').addEventListener('change', e => jump(Number(e.target.value)));
+$('#seek').addEventListener('input', e => {
+  const n = total(); const v = Number(e.target.value);
+  $('#pPos').textContent = (v + 1) + ' / ' + n;
+  $('#pPct').textContent = n ? Math.round((v / n) * 100) + '%' : '0%';
+});
+const RATES = [0.75, 1, 1.25, 1.5, 2];
+$('#bRate').addEventListener('click', () => {
+  const i = RATES.indexOf(settings.rate);
+  settings.rate = RATES[(i + 1) % RATES.length];
+  saveSettings(); syncButtons(); $('#vRate').value = String(settings.rate);
+  toast('語速 ' + settings.rate + '×');
+  if(P.playing && !P.paused){ hardCancel(); speakAt(P.idx); }  // 立即套用
+});
+
+/* ═══ 十、原文／翻譯切換 ═════════════════════ */
+$('#cLang').addEventListener('click', () => setMode('original'));
+$('#cTrans').addEventListener('click', async () => {
+  const d = P.doc; if(!d) return;
+  if(d.translation && d.translation.length === d.sentences.length){ setMode('translated'); return; }
+  if(!navigator.onLine){ toast('翻譯需要網路連線'); return; }
+  const btn = $('#cTrans');
+  btn.classList.add('busy'); transAbort = false;
+  const wasPlaying = P.playing && !P.paused;
+  if(wasPlaying) pause();
+  try{
+    await translateDoc(d, (a, b) => { btn.textContent = `翻譯中 ${Math.round(a/b*100)}%`; });
+    btn.textContent = '中文翻譯';
+    setMode('translated');
+    toast('翻譯完成，已存起來，下次不用再翻');
+  }catch(e){
+    console.error(e);
+    btn.textContent = '翻成中文';
+    toast('翻譯服務連不上，等一下再試', 3500);
+  }finally{ btn.classList.remove('busy'); render(); }
+});
+function setMode(m){
+  if(!P.doc) return;
+  if(m === 'translated' && !(P.doc.translation && P.doc.translation.length === P.doc.sentences.length)) return;
+  P.mode = m;
+  $('#cLang').classList.toggle('on', m === 'original');
+  $('#cTrans').classList.toggle('on', m === 'translated');
+  renderSentences(true);
+  if(P.playing && !P.paused){ hardCancel(); speakAt(P.idx); }
+}
+
+/* ═══ 十一、設定表單 ═════════════════════════ */
+$('#cVoice').addEventListener('click', () => { refreshVoices(); $('#sheetVoice').classList.add('show'); });
+$('#vClose').addEventListener('click', () => $('#sheetVoice').classList.remove('show'));
+$('#sheetVoice').addEventListener('click', e => { if(e.target.id === 'sheetVoice') e.currentTarget.classList.remove('show'); });
+[['#vZh','zh'],['#vEn','en'],['#vJa','ja']].forEach(([sel, lang]) => {
+  $(sel).addEventListener('change', e => {
+    settings.voice[lang] = e.target.value; saveSettings();
+    if(P.playing && !P.paused){ hardCancel(); speakAt(P.idx); }
+  });
+});
+$('#vRate').addEventListener('change', e => {
+  settings.rate = Number(e.target.value); saveSettings(); syncButtons();
+  if(P.playing && !P.paused){ hardCancel(); speakAt(P.idx); }
+});
+$('#vShowSrc').addEventListener('change', e => {
+  settings.showSrc = Number(e.target.value); saveSettings(); renderSentences(true);
+});
+
+/* ═══ 十二、檔案輸入 ═════════════════════════ */
+$('#file').addEventListener('change', e => { importFiles(e.target.files); e.target.value = ''; });
+const dz = $('#dz');
+['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('hot'); }));
+['dragleave','drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('hot'); }));
+dz.addEventListener('drop', e => { if(e.dataTransfer.files.length) importFiles(e.dataTransfer.files); });
+
+/* ═══ 十三、生命週期 ═════════════════════════ */
+document.addEventListener('visibilitychange', () => {
+  if(document.hidden){ accumulateTime(); saveProgress(true); }
+  else if(P.playing && !P.paused) P.t0 = Date.now();
+});
+window.addEventListener('pagehide', () => { accumulateTime(); saveProgress(true); });
+window.addEventListener('beforeunload', () => { try{ speechSynthesis.cancel(); }catch(e){} });
+
+(async function init(){
+  loadSettings();
+  try{ db = await openDB(); }
+  catch(e){ toast('無法開啟本機資料庫，可能是無痕模式', 5000); }
+  syncButtons();
+  await render();
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+})();
+</script>
+</body>
+</html>
