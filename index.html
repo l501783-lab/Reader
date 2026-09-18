@@ -203,8 +203,10 @@ select{background:var(--ink-2);border:1px solid var(--ink-3);border-radius:9px;p
     <button class="iconbtn" id="rfav" aria-label="收藏">☆</button>
   </div>
   <div class="opts">
-    <button class="chip" id="cLang">原文</button>
-    <button class="chip" id="cTrans">翻成中文</button>
+    <button class="chip on" id="cLang">原文</button>
+    <button class="chip tl" data-tl="zh">中文</button>
+    <button class="chip tl" data-tl="en">English</button>
+    <button class="chip tl" data-tl="ja">日本語</button>
     <button class="chip" id="cVoice">語音設定</button>
   </div>
   <div class="sentences" id="sents"></div>
@@ -486,10 +488,29 @@ function hardCancel(){ gen++; try{ speechSynthesis.cancel(); }catch(e){} }
 
 function items(){
   const d = P.doc; if(!d) return [];
-  if(P.mode === 'translated' && d.translation && d.translation.length === d.sentences.length){
-    return d.translation.map((t, i) => ({ text:t || d.sentences[i], lang:'zh', src:d.sentences[i] }));
+  if(P.mode !== 'original'){
+    const t = getTrans(d, P.mode);
+    if(t) return t.map((x, i) => ({ text:x || d.sentences[i], lang:P.mode, src:d.sentences[i] }));
   }
   return d.sentences.map((s, i) => ({ text:s, lang:d.langs[i], src:null }));
+}
+// 取出某個語言的完整譯文；沒有或長度對不上就回 null
+function getTrans(doc, tl){
+  migrate(doc);
+  const t = doc.translations && doc.translations[tl];
+  return (t && t.length === doc.sentences.length) ? t : null;
+}
+// 舊版只存中文譯文，開啟時搬到新結構
+function migrate(doc){
+  if(!doc.translations) doc.translations = {};
+  if(doc.translation && doc.translation.length === doc.sentences.length && !doc.translations.zh){
+    doc.translations.zh = doc.translation;
+  }
+  return doc;
+}
+function transLangs(doc){
+  migrate(doc);
+  return ['zh','en','ja'].filter(l => doc.translations[l] && doc.translations[l].length === doc.sentences.length);
 }
 function total(){ return P.doc ? P.doc.sentences.length : 0; }
 
@@ -614,9 +635,11 @@ async function saveProgress(force){
 }
 
 /* ═══ 五、翻譯 ═══════════════════════════════ */
-async function gtx(text, tl){
-  const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=' +
-              tl + '&dt=t&q=' + encodeURIComponent(text);
+const GTX_CODE = { zh:'zh-TW', en:'en', ja:'ja' };   // 想翻簡體把 zh 改成 'zh-CN'
+const MM_CODE  = { zh:'zh-TW', en:'en', ja:'ja' };
+async function gtx(text, sl, tl){
+  const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=' + sl +
+              '&tl=' + tl + '&dt=t&q=' + encodeURIComponent(text);
   const r = await fetch(url);
   if(!r.ok) throw new Error('gtx ' + r.status);
   const j = await r.json();
@@ -631,20 +654,23 @@ async function mymemory(text, sl, tl){
   if(!t) throw new Error('mm empty');
   return t;
 }
-async function translateOne(text, srcLang){
-  try{ return await gtx(text, 'zh-TW'); }
+// srcLang / tl 都是 'zh' | 'en' | 'ja'
+async function translateOne(text, srcLang, tl){
+  try{ return await gtx(text, 'auto', GTX_CODE[tl]); }   // 來源交給服務自動判斷，準確度較高
   catch(e){
-    return await mymemory(text.slice(0, 480), srcLang === 'ja' ? 'ja' : 'en', 'zh-TW');
+    return await mymemory(text.slice(0, 480), MM_CODE[srcLang] || 'en', MM_CODE[tl]);
   }
 }
 let transAbort = false;
-async function translateDoc(doc, onProgress){
+async function translateDoc(doc, tl, onProgress){
+  migrate(doc);
   const n = doc.sentences.length;
-  const res = (doc.translation && doc.translation.length === n) ? doc.translation.slice() : new Array(n).fill('');
+  const prev = doc.translations[tl];
+  const res = (prev && prev.length === n) ? prev.slice() : new Array(n).fill('');
   const todo = [];
   for(let i = 0; i < n; i++){
     if(res[i]) continue;
-    if(doc.langs[i] === 'zh'){ res[i] = doc.sentences[i]; continue; }
+    if(doc.langs[i] === tl){ res[i] = doc.sentences[i]; continue; }   // 本來就是這個語言，直接用
     todo.push(i);
   }
   let done = n - todo.length;
@@ -653,32 +679,32 @@ async function translateDoc(doc, onProgress){
     if(transAbort) break;
     // 合併成一批，減少請求次數
     const batch = []; let chars = 0;
-    while(k < todo.length && chars < 900 && batch.length < 12){
+    const srcLang = doc.langs[todo[k]];
+    while(k < todo.length && chars < 900 && batch.length < 12 && doc.langs[todo[k]] === srcLang){
       const i = todo[k]; batch.push(i); chars += doc.sentences[i].length + 1; k++;
     }
-    const srcLang = doc.langs[batch[0]] === 'ja' ? 'ja' : 'en';
     let ok = false;
     try{
       const joined = batch.map(i => doc.sentences[i]).join('\n');
-      const out = await translateOne(joined, srcLang);
+      const out = await translateOne(joined, srcLang, tl);
       const lines = out.split('\n').map(s => s.trim()).filter(s => s.length);
       if(lines.length === batch.length){ batch.forEach((i, j) => res[i] = lines[j]); ok = true; }
     }catch(e){ /* 落到逐句 */ }
     if(!ok){
       for(const i of batch){
         if(transAbort) break;
-        try{ res[i] = await translateOne(doc.sentences[i], srcLang); }
+        try{ res[i] = await translateOne(doc.sentences[i], srcLang, tl); }
         catch(e){ res[i] = doc.sentences[i]; }
         await sleep(120);
       }
     }
     done += batch.length;
     onProgress(Math.min(done, n), n);
-    doc.translation = res;
+    doc.translations[tl] = res;
     if(done % 60 < batch.length) { try{ await dbPut('docs', doc); }catch(e){} }
     await sleep(140);
   }
-  doc.translation = res;
+  doc.translations[tl] = res;
   doc.translatedAt = Date.now();
   try{ await dbPut('docs', doc); }catch(e){}
   return res;
@@ -715,7 +741,7 @@ async function importFiles(fileList){
         sentences, langs: sentences.map(s => sentLang(s, lang)),
         lang, chars: text.length,
         cursor: 0, favorite: false, lastReadAt: 0, seconds: 0,
-        translation: null, finished: false
+        translations: {}, finished: false
       };
       await dbPut('docs', doc);
       toast('已加入：' + doc.name, 2000);
@@ -756,7 +782,7 @@ async function render(){
           <span>${d.sentences.length} 句</span>
           <span>${fmtTime(d.lastReadAt)}</span>
           ${d.seconds > 30 ? '<span>已聽 ' + fmtDur(d.seconds) + '</span>' : ''}
-          ${d.translation ? '<span class="tag">已翻譯</span>' : ''}
+          ${transLangs(d).map(l => '<span class="tag">' + LANG_NAME[l] + '譯</span>').join('')}
         </div>
         <div class="bar"><i style="width:${pct}%"></i></div>
       </div>
@@ -807,11 +833,10 @@ function openReader(doc, autoplay){
   $('#rtitle').textContent = doc.name;
   $('#rfav').textContent = doc.favorite ? '★' : '☆';
   $('#rfav').classList.toggle('on', !!doc.favorite);
+  migrate(doc);
   $('#cLang').textContent = '原文（' + (LANG_NAME[doc.lang] || doc.lang) + '）';
   $('#cLang').classList.add('on');
-  $('#cTrans').classList.remove('on');
-  $('#cTrans').textContent = doc.translation ? '中文翻譯' : '翻成中文';
-  $('#cTrans').style.display = doc.lang === 'zh' ? 'none' : '';
+  refreshLangChips();
   $('#player').classList.add('show');
   $('#seek').max = String(Math.max(0, doc.sentences.length - 1));
   renderSentences(true);
@@ -919,33 +944,50 @@ $('#bRate').addEventListener('click', () => {
   if(P.playing && !P.paused){ hardCancel(); speakAt(P.idx); }  // 立即套用
 });
 
-/* ═══ 十、原文／翻譯切換 ═════════════════════ */
-$('#cLang').addEventListener('click', () => setMode('original'));
-$('#cTrans').addEventListener('click', async () => {
+/* ═══ 十、原文／翻譯切換（中英日互譯）═══════ */
+const CHIP_LABEL = { zh:'中文', en:'English', ja:'日本語' };
+
+// 依目前文件狀態更新三顆語言按鈕
+function refreshLangChips(){
   const d = P.doc; if(!d) return;
-  if(d.translation && d.translation.length === d.sentences.length){ setMode('translated'); return; }
+  $$('.chip.tl').forEach(b => {
+    const tl = b.dataset.tl;
+    const has = !!getTrans(d, tl);
+    b.textContent = has ? CHIP_LABEL[tl] : '譯成' + CHIP_LABEL[tl];
+    b.classList.toggle('on', P.mode === tl);
+    b.classList.remove('busy');
+  });
+  $('#cLang').classList.toggle('on', P.mode === 'original');
+}
+
+$('#cLang').addEventListener('click', () => setMode('original'));
+
+$$('.chip.tl').forEach(btn => btn.addEventListener('click', async () => {
+  const d = P.doc; if(!d) return;
+  const tl = btn.dataset.tl;
+  if(getTrans(d, tl)){ setMode(tl); return; }                    // 翻過了，直接切換
   if(!navigator.onLine){ toast('翻譯需要網路連線'); return; }
-  const btn = $('#cTrans');
+  if(btn.classList.contains('busy')) return;
   btn.classList.add('busy'); transAbort = false;
   const wasPlaying = P.playing && !P.paused;
   if(wasPlaying) pause();
   try{
-    await translateDoc(d, (a, b) => { btn.textContent = `翻譯中 ${Math.round(a/b*100)}%`; });
-    btn.textContent = '中文翻譯';
-    setMode('translated');
-    toast('翻譯完成，已存起來，下次不用再翻');
+    await translateDoc(d, tl, (a, b2) => { btn.textContent = `翻譯中 ${Math.round(a / b2 * 100)}%`; });
+    setMode(tl);
+    toast('翻成' + CHIP_LABEL[tl] + '完成，已存起來，下次不用再翻');
+    if(wasPlaying) play(P.idx);
   }catch(e){
     console.error(e);
-    btn.textContent = '翻成中文';
     toast('翻譯服務連不上，等一下再試', 3500);
-  }finally{ btn.classList.remove('busy'); render(); }
-});
+  }finally{ refreshLangChips(); render(); }
+}));
+
+// m = 'original' | 'zh' | 'en' | 'ja'；切換後朗讀也會換成該語言的聲音
 function setMode(m){
   if(!P.doc) return;
-  if(m === 'translated' && !(P.doc.translation && P.doc.translation.length === P.doc.sentences.length)) return;
+  if(m !== 'original' && !getTrans(P.doc, m)) return;
   P.mode = m;
-  $('#cLang').classList.toggle('on', m === 'original');
-  $('#cTrans').classList.toggle('on', m === 'translated');
+  refreshLangChips();
   renderSentences(true);
   if(P.playing && !P.paused){ hardCancel(); speakAt(P.idx); }
 }
