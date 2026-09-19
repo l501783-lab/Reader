@@ -105,7 +105,10 @@ header p{margin:8px 0 0 14px;color:var(--paper-dim);font-size:14px}
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .back{font-size:22px;width:34px;height:34px;display:grid;place-items:center;margin-left:-6px}
 
-.opts{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 4px}
+.opts{display:flex;gap:8px;margin:10px 0 4px;overflow-x:auto;padding-bottom:4px;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.opts::-webkit-scrollbar{display:none}
+.opts .chip{flex:0 0 auto}
 .chip{
   border:1px solid var(--ink-3);border-radius:999px;padding:7px 13px;font-size:13.5px;color:var(--paper-dim);
   background:var(--ink-2);
@@ -207,6 +210,11 @@ select{background:var(--ink-2);border:1px solid var(--ink-3);border-radius:9px;p
     <button class="chip tl" data-tl="zh">中文</button>
     <button class="chip tl" data-tl="en">English</button>
     <button class="chip tl" data-tl="ja">日本語</button>
+    <button class="chip tl" data-tl="el">Ελληνικά</button>
+    <button class="chip tl" data-tl="la">Latina</button>
+    <button class="chip tl" data-tl="he">עברית</button>
+    <button class="chip" id="cSum">📝 重點整理</button>
+    <button class="chip" id="cEngine">🔊 裝置語音</button>
     <button class="chip" id="cVoice">語音設定</button>
   </div>
   <div class="sentences" id="sents"></div>
@@ -229,6 +237,35 @@ select{background:var(--ink-2);border:1px solid var(--ink-3);border-radius:9px;p
 
 <div id="toast"></div>
 
+<!-- 重點整理與匯出 -->
+<div class="sheet" id="sheetSum">
+  <div class="panel">
+    <h4>重點整理</h4>
+    <p class="hint">分析全文的詞頻與句子權重，挑出最有代表性的句子。整個過程在手機裡完成，文件不會上傳。</p>
+    <div class="row"><label>摘要比例</label><select id="sRatio">
+      <option value="0.08">很精簡（8%）</option>
+      <option value="0.15" selected>標準（15%）</option>
+      <option value="0.25">詳細（25%）</option>
+      <option value="0.4">很詳細（40%）</option>
+    </select></div>
+    <div class="row"><label>附上全文逐字稿</label><select id="sFull">
+      <option value="1" selected>附上</option><option value="0">只要重點</option></select></div>
+    <div class="row" id="rowBi" style="display:none"><label>逐字稿加上譯文對照</label><select id="sBi">
+      <option value="0" selected>不要</option><option value="1">要</option></select></div>
+    <div class="row" style="gap:8px;padding-top:14px;border:0">
+      <button class="chip on" id="sMake" style="flex:1;padding:12px">產生</button>
+      <button class="chip" id="sClose" style="padding:12px 18px">關閉</button>
+    </div>
+    <pre id="sPrev" style="display:none;white-space:pre-wrap;word-break:break-word;font-family:var(--sans);
+      font-size:13px;line-height:1.7;background:var(--ink-2);border:1px solid var(--ink-3);
+      border-radius:10px;padding:12px;max-height:38vh;overflow:auto;margin:14px 0 0"></pre>
+    <div class="row" id="sActs" style="display:none;gap:8px;padding-top:12px;border:0">
+      <button class="chip on" id="sSave" style="flex:1;padding:12px">下載 .txt</button>
+      <button class="chip" id="sCopy" style="padding:12px 18px">複製</button>
+    </div>
+  </div>
+</div>
+
 <!-- 語音設定 -->
 <div class="sheet" id="sheetVoice">
   <div class="panel">
@@ -237,12 +274,28 @@ select{background:var(--ink-2);border:1px solid var(--ink-3);border-radius:9px;p
     <div class="row"><label>中文</label><select id="vZh"></select></div>
     <div class="row"><label>英文</label><select id="vEn"></select></div>
     <div class="row"><label>日文</label><select id="vJa"></select></div>
+    <div class="row"><label>希臘文</label><select id="vEl"></select></div>
+    <div class="row"><label>希伯來文</label><select id="vHe"></select></div>
+    <div class="row"><label>拉丁文<br><span style="font-size:12px;color:var(--paper-dim)">沒有拉丁文語音，預設用義大利文發音</span></label><select id="vLa"></select></div>
+    <div class="row"><label>朗讀方式<br><span style="font-size:12px;color:var(--paper-dim)">背景播放＝螢幕關掉也能繼續聽，但需要網路</span></label>
+      <select id="vEngine">
+        <option value="device">裝置語音（可離線）</option>
+        <option value="audio">背景播放（可鎖屏）</option>
+      </select></div>
+    <div class="row"><label>播放時不讓螢幕自動關閉</label><select id="vWake">
+      <option value="1">開啟</option><option value="0">關閉</option></select></div>
     <div class="row"><label>語速</label><select id="vRate">
       <option value="0.75">0.75×</option><option value="1" selected>1×</option>
       <option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option>
     </select></div>
     <div class="row"><label>同時顯示原文（翻譯模式）</label><select id="vShowSrc">
       <option value="1">顯示</option><option value="0">不顯示</option></select></div>
+    <div class="row"><label>這份文件的原文語言<br><span style="font-size:12px;color:var(--paper-dim)">拉丁文和英文都用拉丁字母，程式分不出來，請在這裡指定</span></label>
+      <select id="vDocLang">
+        <option value="">自動判斷</option>
+        <option value="zh">中文</option><option value="en">英文</option><option value="ja">日文</option>
+        <option value="el">希臘文</option><option value="la">拉丁文</option><option value="he">希伯來文</option>
+      </select></div>
     <div class="row" style="justify-content:center;padding-top:16px">
       <button class="chip on" id="vClose" style="padding:11px 28px">完成</button>
     </div>
@@ -262,8 +315,21 @@ select{background:var(--ink-2);border:1px solid var(--ink-3);border-radius:9px;p
 const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const MAXLEN = 150;                       // 單句最長字數，避免行動裝置 TTS 截斷
-const LANG_CODE = { zh:'zh-TW', en:'en-US', ja:'ja-JP' };
-const LANG_NAME = { zh:'中文', en:'英文', ja:'日文' };
+// 支援的語言。la（拉丁文）沒有任何手機內建語音，用義大利文發音近似教會拉丁文。
+const LANGS     = ['zh','en','ja','el','la','he'];
+const LANG_CODE = { zh:'zh-TW', en:'en-US', ja:'ja-JP', el:'el-GR', la:'it-IT', he:'he-IL' };
+const LANG_NAME = { zh:'中文', en:'英文', ja:'日文', el:'希臘文', la:'拉丁文', he:'希伯來文' };
+// 挑語音時的偏好順序
+const VOICE_PREFS = {
+  zh:['zh-tw','zh-hk','zh-cn','zh','cmn'],
+  en:['en-us','en-gb','en'],
+  ja:['ja-jp','ja'],
+  el:['el-gr','el'],
+  he:['he-il','he','iw'],
+  la:['la','it-it','it','es-es','es','pt','ro']
+};
+// 語音設定清單裡要列出哪些語系
+const VOICE_FILTER = { zh:['zh','cmn','yue'], en:['en'], ja:['ja'], el:['el'], he:['he','iw'], la:['la','it','es','pt','ro'] };
 
 /* ── 小工具 ───────────────────────────────── */
 const $  = s => document.querySelector(s);
@@ -331,7 +397,9 @@ function dbDel(store, key){
 }
 
 /* ── 設定 ─────────────────────────────────── */
-const DEFAULTS = { rate:1, voice:{zh:'',en:'',ja:''}, showSrc:1 };
+// engine: 'device' = 手機內建語音（可離線，螢幕關掉會停）
+//         'audio'  = 轉成 MP3 用播放器播（需網路，螢幕關掉可續聽）
+const DEFAULTS = { rate:1, voice:{zh:'',en:'',ja:''}, showSrc:1, engine:'device', wakelock:1 };
 let settings = Object.assign({}, DEFAULTS);
 function loadSettings(){
   try{ settings = Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem('ld-settings')||'{}')); }
@@ -376,22 +444,30 @@ async function readDOCX(buf){
 const RE_KANA  = /[\u3040-\u309F\u30A0-\u30FF]/;
 const RE_HAN   = /[\u4E00-\u9FFF\u3400-\u4DBF]/;
 const RE_LATIN = /[A-Za-z]/;
+const RE_GREEK = /[\u0370-\u03FF\u1F00-\u1FFF]/;   // 含多調符號的古希臘文
+const RE_HEB   = /[\u0590-\u05FF\uFB1D-\uFB4F]/;
 
 function detectDocLang(text){
   const s = text.slice(0, 20000);
   const kana  = (s.match(/[\u3040-\u309F\u30A0-\u30FF]/g) || []).length;
   const han   = (s.match(/[\u4E00-\u9FFF]/g) || []).length;
   const latin = (s.match(/[A-Za-z]/g) || []).length;
-  if(kana > 8 && kana > s.length * 0.004) return 'ja';
+  const greek = (s.match(/[\u0370-\u03FF\u1F00-\u1FFF]/g) || []).length;
+  const heb   = (s.match(/[\u0590-\u05FF\uFB1D-\uFB4F]/g) || []).length;
+  if(heb   > 8 && heb   > latin * 0.3) return 'he';
+  if(greek > 8 && greek > latin * 0.3) return 'el';
+  if(kana  > 8 && kana  > s.length * 0.004) return 'ja';
   if(han > latin * 0.25 && han > 8) return 'zh';
-  if(latin > 0) return 'en';
+  if(latin > 0) return 'en';   // 拉丁文同樣是拉丁字母，無法自動分辨，需在閱讀器裡手動指定
   return 'zh';
 }
 function sentLang(s, docLang){
+  if(RE_HEB.test(s)) return 'he';
+  if(RE_GREEK.test(s)) return 'el';
   if(RE_KANA.test(s)) return 'ja';
   const han = (s.match(RE_HAN) || []).length;
   const lat = (s.match(RE_LATIN) || []).length;
-  if(han === 0 && lat > 0) return 'en';
+  if(han === 0 && lat > 0) return docLang === 'la' ? 'la' : 'en';
   if(han > 0) return docLang === 'ja' ? 'ja' : 'zh';
   return docLang;
 }
@@ -451,7 +527,7 @@ function refreshVoices(){
 function pickVoice(lang){
   const saved = settings.voice[lang];
   if(saved){ const v = voices.find(v => v.voiceURI === saved); if(v) return v; }
-  const prefs = { zh:['zh-tw','zh-hk','zh-cn','zh','cmn'], en:['en-us','en-gb','en'], ja:['ja-jp','ja'] }[lang] || [];
+  const prefs = VOICE_PREFS[lang] || [];
   for(const p of prefs){
     const v = voices.find(v => (v.lang || '').replace('_','-').toLowerCase().indexOf(p) === 0);
     if(v) return v;
@@ -459,14 +535,15 @@ function pickVoice(lang){
   return null;
 }
 function fillVoiceSelects(){
-  [['zh','#vZh'],['en','#vEn'],['ja','#vJa']].forEach(([lang, sel]) => {
+  [['zh','#vZh'],['en','#vEn'],['ja','#vJa'],['el','#vEl'],['la','#vLa'],['he','#vHe']].forEach(([lang, sel]) => {
     const el = $(sel); if(!el) return;
-    const prefix = { zh:['zh','cmn','yue'], en:['en'], ja:['ja'] }[lang];
+    const prefix = VOICE_FILTER[lang];
     const list = voices.filter(v => prefix.some(p => (v.lang||'').toLowerCase().indexOf(p) === 0));
     el.innerHTML = '<option value="">自動選擇</option>' +
       list.map(v => `<option value="${v.voiceURI}">${v.name} (${v.lang})</option>`).join('');
     el.value = settings.voice[lang] || '';
-    if(!list.length) el.innerHTML = '<option value="">這支手機沒有'+LANG_NAME[lang]+'語音</option>';
+    if(lang === 'la' && list.length) el.querySelector('option').textContent = '自動選擇（義大利文優先）';
+    if(!list.length) el.innerHTML = '<option value="">這支手機沒有' + LANG_NAME[lang] + '語音</option>';
   });
   $('#vRate').value = String(settings.rate);
   $('#vShowSrc').value = String(settings.showSrc);
@@ -484,7 +561,113 @@ let keepAlive = null, saveCount = 0, gen = 0;
 
 // 有些瀏覽器 cancel() 之後會補送 onend，會害下一句被跳過或重讀一次。
 // 每次朗讀給一個編號，只有最新編號的回呼算數。
-function hardCancel(){ gen++; try{ speechSynthesis.cancel(); }catch(e){} }
+function hardCancel(){
+  gen++;
+  try{ speechSynthesis.cancel(); }catch(e){}
+  if(audioEl){ try{ audioEl.pause(); }catch(e){} }
+}
+
+/* ── 背景播放引擎 ───────────────────────────
+   手機的語音合成（speechSynthesis）在螢幕鎖住時一定會被系統中斷，這是
+   瀏覽器的限制，繞不過去。所以另外做一條路：把每一句轉成 MP3，用一般的
+   <audio> 播放器播。音訊播放在鎖屏／切到別的 App 時會繼續，還能在鎖定
+   畫面顯示控制按鈕。代價是需要網路。
+   要換成別的語音服務（例如自己的 Google Cloud TTS 金鑰），只要改 ttsUrl()。 */
+const TTS_CODE = { zh:'zh-TW', en:'en', ja:'ja', el:'el', la:'la', he:'iw' };
+let audioEl = null, preloadEl = null, audioFailed = 0;
+
+function ttsUrl(text, lang){
+  const t = String(text).slice(0, 190);            // 這個端點單次上限約 200 字
+  return 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=' +
+         (TTS_CODE[lang] || 'en') + '&total=1&idx=0&textlen=' + t.length +
+         '&q=' + encodeURIComponent(t);
+}
+function getAudio(){
+  if(audioEl) return audioEl;
+  audioEl = new Audio();
+  audioEl.preload = 'auto';
+  audioEl.setAttribute('playsinline', '');
+  audioEl.crossOrigin = null;
+  return audioEl;
+}
+function audioSpeakAt(i){
+  const list = items();
+  if(i >= list.length){ finish(); return; }
+  const it = list[i];
+  const myGen = ++gen;
+  const el = getAudio();
+  el.playbackRate = settings.rate;
+  try{ el.preservesPitch = true; el.mozPreservesPitch = true; el.webkitPreservesPitch = true; }catch(e){}
+  el.onended = () => {
+    if(myGen !== gen || !P.playing || P.paused) return;
+    P.idx = i + 1;
+    bumpProgress();
+    if(P.idx >= list.length){ finish(); return; }
+    highlight(P.idx);
+    audioSpeakAt(P.idx);
+  };
+  el.onerror = () => {
+    if(myGen !== gen || !P.playing || P.paused) return;
+    if(++audioFailed >= 3){                        // 連續失敗就退回裝置語音，不要卡住
+      audioFailed = 0;
+      settings.engine = 'device'; saveSettings(); syncEngineChip();
+      toast('背景播放連不上，先改用裝置語音', 4000);
+      speakAt(P.idx);
+      return;
+    }
+    P.idx = i + 1;
+    if(P.idx >= list.length){ finish(); return; }
+    highlight(P.idx); audioSpeakAt(P.idx);
+  };
+  el.onplaying = () => { audioFailed = 0; };
+  el.src = ttsUrl(it.text, it.lang);
+  const pr = el.play();
+  if(pr && pr.catch) pr.catch(() => {});
+  // 先把下一句抓下來，換句時比較不會卡頓
+  if(list[i+1]){
+    try{
+      preloadEl = preloadEl || new Audio();
+      preloadEl.preload = 'auto';
+      preloadEl.src = ttsUrl(list[i+1].text, list[i+1].lang);
+    }catch(e){}
+  }
+  highlight(i);
+  setMediaMetadata();
+}
+
+/* 鎖定畫面／耳機的播放控制 */
+function setMediaMetadata(){
+  if(!('mediaSession' in navigator) || !P.doc) return;
+  try{
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: P.doc.name,
+      artist: (P.idx + 1) + ' / ' + total() + ' 句',
+      album: '聽文件',
+      artwork: [{ src:'icon-512.png', sizes:'512x512', type:'image/png' },
+                { src:'icon-192.png', sizes:'192x192', type:'image/png' }]
+    });
+    navigator.mediaSession.playbackState = (P.playing && !P.paused) ? 'playing' : 'paused';
+  }catch(e){}
+}
+function initMediaSession(){
+  if(!('mediaSession' in navigator)) return;
+  const set = (a, fn) => { try{ navigator.mediaSession.setActionHandler(a, fn); }catch(e){} };
+  set('play',          () => { if(P.paused) resume(); else if(!P.playing) play(); });
+  set('pause',         () => pause());
+  set('stop',          () => stop());
+  set('previoustrack', () => jump(P.idx - 1));
+  set('nexttrack',     () => jump(P.idx + 1));
+  set('seekbackward',  () => jump(P.idx - 5));
+  set('seekforward',   () => jump(P.idx + 5));
+}
+
+/* 螢幕保持不睡（裝置語音模式下很有用） */
+let wakeLock = null;
+async function requestWakeLock(){
+  if(!settings.wakelock || !('wakeLock' in navigator)) return;
+  try{ wakeLock = await navigator.wakeLock.request('screen'); }catch(e){}
+}
+function releaseWakeLock(){ if(wakeLock){ try{ wakeLock.release(); }catch(e){} wakeLock = null; } }
 
 function items(){
   const d = P.doc; if(!d) return [];
@@ -524,17 +707,23 @@ function unlockAudio(){
 }
 function play(fromIdx){
   if(!P.doc) return;
-  if(!window.speechSynthesis){ toast('這個瀏覽器不支援語音朗讀'); return; }
+  const bg = settings.engine === 'audio';
+  if(!bg && !window.speechSynthesis){ toast('這個瀏覽器不支援語音朗讀'); return; }
+  if(bg && !navigator.onLine){ toast('背景播放需要網路連線', 3500); return; }
   if(typeof fromIdx === 'number') P.idx = Math.max(0, Math.min(fromIdx, total() - 1));
   if(P.idx >= total()) P.idx = 0;
   hardCancel();
-  if(!P.playing) unlockAudio();
+  if(!P.playing && !bg) unlockAudio();
   P.playing = true; P.paused = false; P.t0 = Date.now();
-  startKeepAlive();
+  startKeepAlive(); requestWakeLock();
   speakAt(P.idx);
-  syncButtons();
+  syncButtons(); setMediaMetadata();
 }
+// 依設定分派到兩個引擎
 function speakAt(i){
+  return settings.engine === 'audio' ? audioSpeakAt(i) : deviceSpeakAt(i);
+}
+function deviceSpeakAt(i){
   const list = items();
   if(i >= list.length){ finish(); return; }
   const it = list[i];
@@ -550,7 +739,7 @@ function speakAt(i){
     bumpProgress();
     if(P.idx >= list.length){ finish(); return; }
     highlight(P.idx);
-    speakAt(P.idx);
+    deviceSpeakAt(P.idx);
   };
   u.onerror = e => {
     const err = e && e.error;
@@ -558,44 +747,56 @@ function speakAt(i){
     if(!P.playing || P.paused) return;
     P.idx = i + 1;                       // 跳過壞掉的一句，繼續往下
     if(P.idx >= list.length){ finish(); return; }
-    highlight(P.idx); speakAt(P.idx);
+    highlight(P.idx); deviceSpeakAt(P.idx);
   };
   speechSynthesis.speak(u);
   highlight(i);
+  setMediaMetadata();
 }
 function pause(){
   if(!P.playing) return;
   P.paused = true;
-  try{ speechSynthesis.pause(); }catch(e){}
-  // 少數 Android 瀏覽器沒有真正的 pause，這時只能中斷，繼續時從這一句頭再讀
-  setTimeout(() => {
-    if(P.paused && !speechSynthesis.paused && speechSynthesis.speaking) hardCancel();
-  }, 350);
-  stopKeepAlive(); accumulateTime(); saveProgress(true);
-  syncButtons();
+  if(settings.engine === 'audio'){
+    if(audioEl){ try{ audioEl.pause(); }catch(e){} }
+  }else{
+    try{ speechSynthesis.pause(); }catch(e){}
+    // 少數 Android 瀏覽器沒有真正的 pause，這時只能中斷，繼續時從這一句頭再讀
+    setTimeout(() => {
+      if(P.paused && !speechSynthesis.paused && speechSynthesis.speaking) hardCancel();
+    }, 350);
+  }
+  stopKeepAlive(); releaseWakeLock(); accumulateTime(); saveProgress(true);
+  syncButtons(); setMediaMetadata();
 }
 function resume(){
   if(!P.doc) return;
   if(!P.paused){ play(); return; }
-  P.paused = false; P.playing = true; P.t0 = Date.now(); startKeepAlive();
-  let resumed = false;
-  try{ speechSynthesis.resume(); }catch(e){}
-  setTimeout(() => {
-    if(!P.playing || P.paused) return;
-    if(!speechSynthesis.speaking){ hardCancel(); speakAt(P.idx); }  // 後備：從這一句頭重讀
-  }, 320);
-  syncButtons();
+  P.paused = false; P.playing = true; P.t0 = Date.now();
+  startKeepAlive(); requestWakeLock();
+  if(settings.engine === 'audio'){
+    if(audioEl && audioEl.src){
+      const pr = audioEl.play();
+      if(pr && pr.catch) pr.catch(() => { hardCancel(); audioSpeakAt(P.idx); });
+    }else audioSpeakAt(P.idx);
+  }else{
+    try{ speechSynthesis.resume(); }catch(e){}
+    setTimeout(() => {
+      if(!P.playing || P.paused) return;
+      if(!speechSynthesis.speaking){ hardCancel(); deviceSpeakAt(P.idx); }  // 後備：從這一句頭重讀
+    }, 320);
+  }
+  syncButtons(); setMediaMetadata();
 }
 function stop(){
   P.playing = false; P.paused = false;
   hardCancel();
-  stopKeepAlive(); accumulateTime(); saveProgress(true);
-  syncButtons();
+  stopKeepAlive(); releaseWakeLock(); accumulateTime(); saveProgress(true);
+  syncButtons(); setMediaMetadata();
 }
 function finish(){
   P.playing = false; P.paused = false; P.idx = total();
   hardCancel();
-  stopKeepAlive(); accumulateTime();
+  stopKeepAlive(); releaseWakeLock(); accumulateTime();
   if(P.doc) P.doc.finished = true;
   saveProgress(true); syncButtons(); updateSeek();
   toast('讀完了');
@@ -611,7 +812,7 @@ function jump(i){
 function startKeepAlive(){
   // Chrome/Android 約 15 秒會自己停掉，靠 pause+resume 續命；iOS 不需要也不適用
   stopKeepAlive();
-  if(IS_IOS) return;
+  if(IS_IOS || settings.engine === 'audio') return;
   keepAlive = setInterval(() => {
     if(P.playing && !P.paused && speechSynthesis.speaking){
       try{ speechSynthesis.pause(); speechSynthesis.resume(); }catch(e){}
@@ -635,8 +836,8 @@ async function saveProgress(force){
 }
 
 /* ═══ 五、翻譯 ═══════════════════════════════ */
-const GTX_CODE = { zh:'zh-TW', en:'en', ja:'ja' };   // 想翻簡體把 zh 改成 'zh-CN'
-const MM_CODE  = { zh:'zh-TW', en:'en', ja:'ja' };
+const GTX_CODE = { zh:'zh-TW', en:'en', ja:'ja', el:'el', la:'la', he:'iw' };  // 想翻簡體把 zh 改成 'zh-CN'
+const MM_CODE  = { zh:'zh-TW', en:'en', ja:'ja', el:'el-GR', la:'la', he:'he-IL' };
 async function gtx(text, sl, tl){
   const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=' + sl +
               '&tl=' + tl + '&dt=t&q=' + encodeURIComponent(text);
@@ -840,7 +1041,7 @@ function openReader(doc, autoplay){
   $('#player').classList.add('show');
   $('#seek').max = String(Math.max(0, doc.sentences.length - 1));
   renderSentences(true);
-  updateSeek(); syncButtons();
+  updateSeek(); syncButtons(); syncEngineChip(); setMediaMetadata();
   window.scrollTo(0, 0);
   if(autoplay) play(P.idx);
 }
@@ -869,12 +1070,14 @@ function renderSentences(reset){
     a = Math.max(0, b - WIN);
     P.win = [a, b];
   }
-  const showSrc = P.mode === 'translated' && Number(settings.showSrc);
+  const showSrc = P.mode !== 'original' && Number(settings.showSrc);
   let html = a > 0 ? `<button class="more" data-more="up">▲ 往前 ${Math.min(WIN, a)} 句</button>` : '';
   for(let i = a; i < b; i++){
     const it = list[i];
-    html += `<div class="s ${i === P.idx ? 'cur' : (i < P.idx ? 'done' : '')}" data-i="${i}">${esc(it.text)}` +
-            (showSrc && it.src ? `<span class="alt">${esc(it.src)}</span>` : '') + '</div>';
+    const dir = it.lang === 'he' ? ' dir="rtl"' : '';          // 希伯來文由右至左
+    const sdir = (it.src && RE_HEB.test(it.src)) ? ' dir="rtl"' : '';
+    html += `<div class="s ${i === P.idx ? 'cur' : (i < P.idx ? 'done' : '')}" data-i="${i}"${dir}>${esc(it.text)}` +
+            (showSrc && it.src ? `<span class="alt"${sdir}>${esc(it.src)}</span>` : '') + '</div>';
   }
   if(b < n) html += `<button class="more" data-more="down">▼ 再讀 ${Math.min(WIN, n - b)} 句</button>`;
   $('#sents').innerHTML = html;
@@ -941,11 +1144,12 @@ $('#bRate').addEventListener('click', () => {
   settings.rate = RATES[(i + 1) % RATES.length];
   saveSettings(); syncButtons(); $('#vRate').value = String(settings.rate);
   toast('語速 ' + settings.rate + '×');
-  if(P.playing && !P.paused){ hardCancel(); speakAt(P.idx); }  // 立即套用
+  if(settings.engine === 'audio'){ if(audioEl) audioEl.playbackRate = settings.rate; }
+  else if(P.playing && !P.paused){ hardCancel(); speakAt(P.idx); }  // 立即套用
 });
 
 /* ═══ 十、原文／翻譯切換（中英日互譯）═══════ */
-const CHIP_LABEL = { zh:'中文', en:'English', ja:'日本語' };
+const CHIP_LABEL = { zh:'中文', en:'English', ja:'日本語', el:'Ελληνικά', la:'Latina', he:'עברית' };
 
 // 依目前文件狀態更新三顆語言按鈕
 function refreshLangChips(){
@@ -983,20 +1187,73 @@ $$('.chip.tl').forEach(btn => btn.addEventListener('click', async () => {
 }));
 
 // m = 'original' | 'zh' | 'en' | 'ja'；切換後朗讀也會換成該語言的聲音
+// 這支手機有沒有對應語音？拉丁文永遠沒有，會用義大利文之類的近似發音
+const warned = {};
+function warnVoice(lang){
+  if(warned[lang]) return;
+  const v = pickVoice(lang);
+  if(!v){ warned[lang] = 1; toast('這支手機沒有' + LANG_NAME[lang] + '語音，請到系統設定下載語音包', 4500); }
+  else if(lang === 'la'){ warned[lang] = 1; toast('拉丁文沒有內建語音，改用「' + v.name + '」發音', 4000); }
+}
 function setMode(m){
   if(!P.doc) return;
   if(m !== 'original' && !getTrans(P.doc, m)) return;
   P.mode = m;
   refreshLangChips();
   renderSentences(true);
+  if(m !== 'original') warnVoice(m);
   if(P.playing && !P.paused){ hardCancel(); speakAt(P.idx); }
 }
 
 /* ═══ 十一、設定表單 ═════════════════════════ */
-$('#cVoice').addEventListener('click', () => { refreshVoices(); $('#sheetVoice').classList.add('show'); });
+function syncEngineChip(){
+  const bg = settings.engine === 'audio';
+  const c = $('#cEngine');
+  if(c){ c.textContent = bg ? '🎧 背景播放' : '🔊 裝置語音'; c.classList.toggle('on', bg); }
+  const sel = $('#vEngine'); if(sel) sel.value = settings.engine;
+  const w = $('#vWake'); if(w) w.value = String(settings.wakelock);
+}
+function setEngine(v){
+  if(settings.engine === v) return;
+  const wasPlaying = P.playing && !P.paused;
+  const at = P.idx;
+  if(P.playing) stop();
+  settings.engine = v; saveSettings(); syncEngineChip();
+  toast(v === 'audio'
+    ? '改用背景播放：螢幕關掉也會繼續唸，需要網路'
+    : '改用裝置語音：可離線，但螢幕關掉會停', 3800);
+  if(wasPlaying) play(at);
+}
+$('#cEngine').addEventListener('click', () => setEngine(settings.engine === 'audio' ? 'device' : 'audio'));
+$('#vEngine').addEventListener('change', e => setEngine(e.target.value));
+$('#vWake').addEventListener('change', e => {
+  settings.wakelock = Number(e.target.value); saveSettings();
+  if(settings.wakelock && P.playing && !P.paused) requestWakeLock(); else releaseWakeLock();
+});
+
+$('#cVoice').addEventListener('click', () => {
+  refreshVoices();
+  $('#vDocLang').value = (P.doc && P.doc.langOverride) || '';
+  $('#sheetVoice').classList.add('show');
+});
+// 手動指定原文語言（拉丁文一定要靠這個，因為和英文同樣是拉丁字母）
+$('#vDocLang').addEventListener('change', async e => {
+  const d = P.doc; if(!d) return;
+  const v = e.target.value;
+  d.langOverride = v || '';
+  d.lang = v || detectDocLang(d.sentences.join('\n'));
+  d.langs = d.sentences.map(x => sentLang(x, d.lang));
+  try{ await dbPut('docs', d); }catch(err){}
+  $('#cLang').textContent = '原文（' + (LANG_NAME[d.lang] || d.lang) + '）';
+  if(P.mode === 'original'){
+    renderSentences(true);
+    if(P.playing && !P.paused){ hardCancel(); speakAt(P.idx); }
+  }
+  toast('原文語言設為' + LANG_NAME[d.lang]);
+});
 $('#vClose').addEventListener('click', () => $('#sheetVoice').classList.remove('show'));
 $('#sheetVoice').addEventListener('click', e => { if(e.target.id === 'sheetVoice') e.currentTarget.classList.remove('show'); });
-[['#vZh','zh'],['#vEn','en'],['#vJa','ja']].forEach(([sel, lang]) => {
+[['#vZh','zh'],['#vEn','en'],['#vJa','ja'],['#vEl','el'],['#vLa','la'],['#vHe','he']].forEach(([sel, lang]) => {
   $(sel).addEventListener('change', e => {
     settings.voice[lang] = e.target.value; saveSettings();
     if(P.playing && !P.paused){ hardCancel(); speakAt(P.idx); }
@@ -1017,10 +1274,247 @@ const dz = $('#dz');
 ['dragleave','drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('hot'); }));
 dz.addEventListener('drop', e => { if(e.dataTransfer.files.length) importFiles(e.dataTransfer.files); });
 
+
+/* ═══ 十四、重點整理與匯出 ═════════════════
+   離線的「抽取式摘要」：統計全文用詞，算出每一句的資訊量，挑出最有代表
+   性的句子，再依原順序排好。它挑的是原文既有的句子，不會自己改寫或杜撰，
+   所以內容一定忠於原文。全部在手機裡算，文件不會上傳。            */
+
+const STOP_EN = new Set(('a an the and or but if then than that this these those of in on at to for from by with '+
+  'as is are was were be been being it its he she they we you i his her their our your not no do does did have '+
+  'has had will would can could should may might must there here what which who whom when where why how all any '+
+  'some such own same so too very just also more most other into out up down over under again further once').split(' '));
+// 只放純粹的虛詞。像「人、中、上、下、個、自」這些會出現在複合詞裡
+// （人工智慧、中小企業），不能列進來，否則關鍵詞會被切斷。
+const STOP_ZH = new Set(('的 了 是 在 和 就 不 也 很 到 要 去 你 我 他 她 它 會 著 沒 們 以 及 但 因 為 所 於 與 或 之 '+
+  '其 而 則 並 被 把 讓 可 等 此 從 由 且 即 若 亦 已 未 再 更 又 只 還 都 能 說 有 這 那 吧 呢 嗎 啊 麼 什 怎 時 候 '+
+  'は が を に の と で も から まで より へ や か ね よ です ます した する ある いる れる られる').split(' '));
+const CJK_RUN = /[\u4E00-\u9FFF\u3400-\u4DBF\u3040-\u309F\u30A0-\u30FF]+/g;
+const WORD_RUN = /[\p{L}][\p{L}\p{M}']*/gu;
+
+function tokenize(text, lang){
+  const out = [];
+  if(lang === 'zh' || lang === 'ja'){
+    const runs = String(text).match(CJK_RUN) || [];
+    for(const r of runs){
+      for(let i = 0; i + 1 < r.length; i++){          // 中日文沒有空格，改用「雙字詞」統計
+        const bg = r.slice(i, i + 2);
+        if(STOP_ZH.has(bg[0]) || STOP_ZH.has(bg[1])) continue;
+        out.push(bg);
+      }
+      if(r.length === 1 && !STOP_ZH.has(r)) out.push(r);
+    }
+  }else{
+    let m; const re = new RegExp(WORD_RUN.source, 'gu');
+    while((m = re.exec(String(text))) !== null){
+      const w = m[0].toLowerCase();
+      if(w.length < 2 || STOP_EN.has(w)) continue;
+      out.push(w);
+    }
+  }
+  return out;
+}
+// 看起來像標題的短句：字少、結尾沒有標點
+function looksLikeHeading(s){
+  const t = s.trim();
+  return t.length >= 2 && t.length <= 32 && !/[。．！？!?；;：:,，、]$/.test(t) && !/[.]$/.test(t);
+}
+function summarize(list, ratio){
+  const n = list.length;
+  const df = new Map(), tokensOf = [];
+  for(const it of list){
+    const tk = tokenize(it.text, it.lang);
+    tokensOf.push(tk);
+    for(const t of new Set(tk)) df.set(t, (df.get(t) || 0) + 1);
+  }
+  const tf = new Map();
+  tokensOf.forEach(tk => tk.forEach(t => tf.set(t, (tf.get(t) || 0) + 1)));
+
+  const scores = list.map((it, i) => {
+    const tk = tokensOf[i];
+    if(!tk.length) return { i, score:-1 };
+    let sum = 0;
+    for(const t of new Set(tk)){
+      const idf = Math.log(1 + n / (1 + (df.get(t) || 1)));
+      sum += (tf.get(t) || 1) * idf;
+    }
+    let score = sum / Math.sqrt(tk.length + 4);
+    if(i < n * 0.06) score *= 1.25;                    // 開頭常是主旨
+    if(it.text.length < 10) score *= 0.35;             // 太短的碎句降權
+    if(/[0-9０-９]/.test(it.text)) score *= 1.08;       // 有數字通常是結論或數據
+    if(looksLikeHeading(it.text)) score *= 1.15;
+    return { i, score };
+  });
+
+  const want = Math.max(3, Math.min(n, Math.round(n * ratio)));
+  const picked = scores.filter(x => x.score > 0)
+                       .sort((a, b) => b.score - a.score)
+                       .slice(0, want)
+                       .map(x => x.i)
+                       .sort((a, b) => a - b);
+  const cjk = list.filter(x => x.lang === 'zh' || x.lang === 'ja').length > list.length / 2;
+  let ranked = Array.from(tf.entries())
+    .filter(([t]) => (df.get(t) || 0) >= 2)
+    .sort((a, b) => b[1] - a[1]);
+  if(cjk) ranked = mergeGrams(ranked);
+  const keywords = dropSubstrings(ranked.map(([t]) => t)).slice(0, 15);
+  return { picked, keywords };
+}
+// 中日文是用雙字統計的，會出現「人工／工智／智慧」這種碎片，
+// 把首尾相接且出現次數接近的接回「人工智慧」。
+function mergeGrams(pairs){
+  let cur = pairs.slice(0, 60);
+  for(let pass = 0; pass < 3; pass++){
+    const used = new Set(), out = [];
+    for(let i = 0; i < cur.length; i++){
+      if(used.has(i)) continue;
+      used.add(i);
+      let t = cur[i][0], c = cur[i][1], grow = true, guard = 0;
+      while(grow && guard++ < 6 && t.length < 4){      // 中日文詞彙幾乎都在四字以內
+        grow = false;
+        for(let j = 0; j < cur.length; j++){
+          if(used.has(j)) continue;
+          const t2 = cur[j][0], c2 = cur[j][1];
+          if(Math.min(c, c2) / Math.max(c, c2) < 0.6) continue;
+          if(t.slice(-1) === t2[0]){                    // 往後接：人工 + 工智 → 人工智
+            t = t + t2.slice(1); c = Math.min(c, c2); used.add(j); grow = true; break;
+          }
+          if(t2.slice(-1) === t[0]){                    // 往前接：工智慧 ← 人工
+            t = t2.slice(0, -1) + t; c = Math.min(c, c2); used.add(j); grow = true; break;
+          }
+        }
+      }
+      out.push([t, c]);
+    }
+    cur = out.sort((a, b) => b[1] - a[1]);
+  }
+  return cur;
+}
+function dropSubstrings(terms){
+  return terms.filter((t, i) => !terms.some((o, j) => j !== i && o.length > t.length && o.indexOf(t) >= 0));
+}
+function estimateMinutes(doc){
+  let sec = 0;
+  doc.sentences.forEach((s, i) => {
+    const cps = (doc.langs[i] === 'zh' || doc.langs[i] === 'ja') ? 4.8 : 14;
+    sec += s.length / cps;
+  });
+  return Math.max(1, Math.round(sec / 60));
+}
+function pad2(x){ return x < 10 ? '0' + x : String(x); }
+function stamp(){
+  const d = new Date();
+  return d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate()) +
+         ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+}
+function buildReport(doc, opt){
+  const list = items();                                 // 目前看的是原文還是譯文，就整理哪一份
+  const modeName = P.mode === 'original' ? '原文（' + LANG_NAME[doc.lang] + '）' : LANG_NAME[P.mode] + '譯文';
+  const { picked, keywords } = summarize(list, opt.ratio);
+  const chars = list.reduce((a, x) => a + x.text.length, 0);
+  const L = [];
+  const rule = '════════════════════════════════';
+  L.push(rule, doc.name, rule, '');
+  L.push('來源檔案：' + doc.name + '.' + doc.ext);
+  L.push('整理內容：' + modeName);
+  L.push('字數：' + chars.toLocaleString() + '　句數：' + list.length);
+  L.push('預估朗讀時間：約 ' + estimateMinutes(doc) + ' 分鐘（1× 語速）');
+  L.push('整理時間：' + stamp());
+  L.push('');
+  if(keywords.length){
+    L.push('──── 關鍵詞 ────');
+    L.push(keywords.join('、'));
+    L.push('');
+  }
+  const heads = [];
+  list.forEach((it, i) => { if(looksLikeHeading(it.text) && heads.length < 30) heads.push(it.text.trim()); });
+  if(heads.length >= 3){
+    L.push('──── 可能的章節標題 ────');
+    heads.forEach((h, i) => L.push((i + 1) + '. ' + h));
+    L.push('');
+  }
+  L.push('──── 重點摘要（' + picked.length + ' / ' + list.length + ' 句，約 ' +
+         Math.round(picked.length / list.length * 100) + '%）────');
+  picked.forEach((idx, k) => L.push((k + 1) + '. ' + list[idx].text.trim()));
+  L.push('');
+  if(opt.full){
+    L.push('──── 全文逐字稿 ────');
+    list.forEach((it, i) => {
+      L.push(String(i + 1).padStart(4, ' ') + '｜' + it.text.trim());
+      if(opt.bi && it.src) L.push('    ↳ ' + it.src.trim());
+    });
+    L.push('');
+  }
+  L.push(rule);
+  L.push('由「聽文件」整理。重點摘要是從原文挑出的句子，未經改寫。');
+  return L.join('\n');
+}
+
+/* 存成 txt：iPhone 走系統分享（存到「檔案」），其他裝置直接下載 */
+async function saveTxt(filename, text){
+  const blob = new Blob(['\ufeff' + text], { type:'text/plain;charset=utf-8' });
+  try{
+    const file = new File([blob], filename, { type:'text/plain' });
+    if(navigator.canShare && navigator.canShare({ files:[file] })){
+      await navigator.share({ files:[file], title:filename });
+      return;
+    }
+  }catch(e){ if(e && e.name === 'AbortError') return; }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.style.display = 'none';
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1500);
+  toast('已下載 ' + filename, 3000);
+}
+
+let lastReport = '';
+$('#cSum').addEventListener('click', () => {
+  if(!P.doc) return;
+  $('#rowBi').style.display = (P.mode !== 'original') ? '' : 'none';
+  $('#sPrev').style.display = 'none';
+  $('#sActs').style.display = 'none';
+  $('#sheetSum').classList.add('show');
+});
+$('#sClose').addEventListener('click', () => $('#sheetSum').classList.remove('show'));
+$('#sheetSum').addEventListener('click', e => { if(e.target.id === 'sheetSum') e.currentTarget.classList.remove('show'); });
+$('#sMake').addEventListener('click', () => {
+  if(!P.doc) return;
+  const btn = $('#sMake'); btn.textContent = '整理中…'; btn.classList.add('busy');
+  setTimeout(() => {
+    try{
+      lastReport = buildReport(P.doc, {
+        ratio: Number($('#sRatio').value),
+        full: Number($('#sFull').value),
+        bi: Number($('#sBi').value)
+      });
+      const pv = $('#sPrev');
+      pv.textContent = lastReport.slice(0, 4000) + (lastReport.length > 4000 ? '\n\n…（預覽到此，完整內容請下載）' : '');
+      pv.style.display = ''; $('#sActs').style.display = '';
+    }catch(err){ console.error(err); toast('整理失敗', 3000); }
+    btn.textContent = '重新產生'; btn.classList.remove('busy');
+  }, 30);
+});
+$('#sSave').addEventListener('click', () => {
+  if(!lastReport || !P.doc) return;
+  const safe = P.doc.name.replace(/[\\/:*?"<>|]/g, '_').slice(0, 40);
+  saveTxt(safe + '_重點整理.txt', lastReport);
+});
+$('#sCopy').addEventListener('click', async () => {
+  if(!lastReport) return;
+  try{ await navigator.clipboard.writeText(lastReport); toast('已複製到剪貼簿'); }
+  catch(e){
+    const ta = document.createElement('textarea');
+    ta.value = lastReport; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); toast('已複製到剪貼簿'); }catch(e2){ toast('複製失敗，請改用下載'); }
+    ta.remove();
+  }
+});
+
 /* ═══ 十三、生命週期 ═════════════════════════ */
 document.addEventListener('visibilitychange', () => {
   if(document.hidden){ accumulateTime(); saveProgress(true); }
-  else if(P.playing && !P.paused) P.t0 = Date.now();
+  else if(P.playing && !P.paused){ P.t0 = Date.now(); requestWakeLock(); }
 });
 window.addEventListener('pagehide', () => { accumulateTime(); saveProgress(true); });
 window.addEventListener('beforeunload', () => { try{ speechSynthesis.cancel(); }catch(e){} });
@@ -1029,7 +1523,7 @@ window.addEventListener('beforeunload', () => { try{ speechSynthesis.cancel(); }
   loadSettings();
   try{ db = await openDB(); }
   catch(e){ toast('無法開啟本機資料庫，可能是無痕模式', 5000); }
-  syncButtons();
+  syncButtons(); syncEngineChip(); initMediaSession();
   await render();
   if('serviceWorker' in navigator){
     navigator.serviceWorker.register('sw.js').catch(() => {});

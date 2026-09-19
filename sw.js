@@ -1,7 +1,7 @@
 /* 聽文件 — Service Worker
    目的：讓 App 加到主畫面後，沒有網路也能開啟並朗讀已存在手機裡的文件。
    改版時把 VERSION 數字 +1，使用者下次開啟就會更新。 */
-const VERSION = 'listen-doc-v1';
+const VERSION = 'listen-doc-v5';
 const SHELL = [
   './',
   './index.html',
