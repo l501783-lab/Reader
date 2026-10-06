@@ -314,7 +314,8 @@ select{background:var(--ink-2);border:1px solid var(--ink-3);border-radius:9px;p
 
 const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-const MAXLEN = 150;                       // 單句最長字數，避免行動裝置 TTS 截斷
+const MAXLEN  = 150;   // 一段朗讀單位的目標長度
+const HARDMAX = 185;   // 硬上限：背景播放的音訊端點單次約 190 字，不能超過
 // 支援的語言。la（拉丁文）沒有任何手機內建語音，用義大利文發音近似教會拉丁文。
 const LANGS     = ['zh','en','ja','el','la','he'];
 const LANG_CODE = { zh:'zh-TW', en:'en-US', ja:'ja-JP', el:'el-GR', la:'it-IT', he:'he-IL' };
@@ -471,45 +472,77 @@ function sentLang(s, docLang){
   if(han > 0) return docLang === 'ja' ? 'ja' : 'zh';
   return docLang;
 }
-function hardWrap(s){
+/* 斷句規則（這段決定「唸到哪裡換下一句」）
+   1. 空行＝換段落。段落裡被 PDF 硬斷行的文字會先接回成完整一段。
+   2. 只在「句號、問號、驚嘆號、分號」這類結尾標點處斷句。
+   3. 句子超過上限時，才退而求其次在「逗號、頓號、冒號」處斷。
+   絕不從句子中間或單字中間切開。                                   */
+const ENDERS  = '。．！？!?；;…〜';
+const COMMAS  = '，、,：:；;';
+const CLOSERS = '」』”’）)】》"\'';
+
+// 把同一段裡被硬斷行的句子接回去（PDF 每一行都會變成一個換行）
+function joinLines(block){
+  const lines = block.split('\n').map(x => x.trim()).filter(x => x.length);
+  let acc = '';
+  for(const line of lines){
+    if(!acc){ acc = line; continue; }
+    if(/-$/.test(acc) && /^[a-zA-Zα-ωΑ-Ω]/.test(line)){   // 英文／希臘文的行末連字號斷字
+      acc = acc.slice(0, -1) + line; continue;
+    }
+    // 兩邊都是字母或數字時要補一個空格，中日文則直接相接
+    const needSpace = /[A-Za-z0-9\u0370-\u03FF\u0590-\u05FF.,;:!?)\]]$/.test(acc) &&
+                      /^[A-Za-z0-9\u0370-\u03FF\u0590-\u05FF(\[]/.test(line);
+    acc += (needSpace ? ' ' : '') + line;
+  }
+  return acc.replace(/[ \t]{2,}/g, ' ').trim();
+}
+
+// 第二層：句子太長時，只在逗號類標點處斷開
+function splitByComma(s){
   if(s.length <= MAXLEN) return [s];
   const out = []; let buf = '';
   for(let i = 0; i < s.length; i++){
     buf += s[i];
-    if(buf.length >= MAXLEN){
-      let cut = -1;
-      for(let j = buf.length - 1; j > MAXLEN * 0.45; j--){
-        if('、，,；;:：）)」』 '.indexOf(buf[j]) >= 0){ cut = j; break; }
-      }
-      if(cut > 0){ out.push(buf.slice(0, cut + 1)); buf = buf.slice(cut + 1); }
-      else { out.push(buf); buf = ''; }
+    const atComma = COMMAS.indexOf(s[i]) >= 0;
+    if(atComma && buf.length >= MAXLEN * 0.5){
+      while(i + 1 < s.length && CLOSERS.indexOf(s[i+1]) >= 0) buf += s[++i];
+      out.push(buf); buf = '';
+      continue;
+    }
+    // 真的找不到逗號又超過硬上限（背景播放的音訊端點限制），退到空白處
+    if(buf.length >= HARDMAX){
+      let cut = buf.lastIndexOf(' ');
+      if(cut < HARDMAX * 0.5) cut = buf.length - 1;
+      out.push(buf.slice(0, cut + 1)); buf = buf.slice(cut + 1);
     }
   }
   if(buf.trim()) out.push(buf);
   return out;
 }
+
 function splitSentences(raw){
-  const text = String(raw || '')
-    .replace(/\r/g, '')
-    .replace(/\u00AD/g, '')
-    .replace(/[ \t]{2,}/g, ' ');
-  const paras = text.split(/\n+/).map(p => p.trim()).filter(p => p.length);
-  const ENDERS = '。．！？!?；;…〜';
-  const CLOSERS = '」』”’）)】》"\'';
+  const text = String(raw || '').replace(/\r/g, '').replace(/\u00AD/g, '');
+  const blocks = text.split(/\n{2,}/);
   const out = [];
-  const push = s => { s = s.trim(); if(s) hardWrap(s).forEach(x => { if(x.trim()) out.push(x.trim()); }); };
-  for(const p of paras){
+  const push = s => {
+    s = s.trim(); if(!s) return;
+    splitByComma(s).forEach(x => { x = x.trim(); if(x) out.push(x); });
+  };
+  for(const block of blocks){
+    const para = joinLines(block);
+    if(!para) continue;
     let buf = '';
-    for(let i = 0; i < p.length; i++){
-      const ch = p[i]; buf += ch;
+    for(let i = 0; i < para.length; i++){
+      const ch = para[i]; buf += ch;
       let isEnd = ENDERS.indexOf(ch) >= 0;
-      if(!isEnd && ch === '.'){
-        const nxt = p[i+1] || ' ';
-        const prv = p[i-1] || ' ';
-        isEnd = /[\s]/.test(nxt) && !/\d/.test(prv) && !/^[a-z]/.test(p[i+2] || '');
+      if(!isEnd && ch === '.'){                      // 英文句點：排除小數點與縮寫
+        const nxt = para[i+1] || ' ';
+        const prv = para[i-1] || ' ';
+        isEnd = /\s/.test(nxt) && !/\d/.test(prv) && !/^[a-z]/.test(para[i+2] || '');
       }
       if(isEnd){
-        while(i + 1 < p.length && CLOSERS.indexOf(p[i+1]) >= 0) buf += p[++i];
+        while(i + 1 < para.length && CLOSERS.indexOf(para[i+1]) >= 0) buf += para[++i];
         push(buf); buf = '';
       }
     }
@@ -942,7 +975,7 @@ async function importFiles(fileList){
         sentences, langs: sentences.map(s => sentLang(s, lang)),
         lang, chars: text.length,
         cursor: 0, favorite: false, lastReadAt: 0, seconds: 0,
-        translations: {}, finished: false
+        translations: {}, finished: false, splitVer: 2
       };
       await dbPut('docs', doc);
       toast('已加入：' + doc.name, 2000);
@@ -1024,8 +1057,25 @@ $$('.tabs button').forEach(b => b.addEventListener('click', () => {
 }));
 
 /* ═══ 八、閱讀器畫面 ═════════════════════════ */
-function openReader(doc, autoplay){
+// 舊版文件用舊規則斷過句，開啟時重新依新規則斷一次。
+// 已經翻譯過的文件不動，以免譯文和句子對不起來（想套用新斷句就重新匯入一次）。
+async function maybeResplit(doc){
+  if(doc.splitVer === 2) return;
+  doc.splitVer = 2;
+  if(!transLangs(doc).length && doc.sentences.length){
+    const ns = splitSentences(doc.sentences.join('\n'));
+    if(ns.length){
+      const ratio = (doc.cursor || 0) / doc.sentences.length;
+      doc.sentences = ns;
+      doc.langs = ns.map(x => sentLang(x, doc.lang));
+      doc.cursor = Math.max(0, Math.min(ns.length - 1, Math.round(ratio * ns.length)));
+    }
+  }
+  try{ await dbPut('docs', doc); }catch(e){}
+}
+async function openReader(doc, autoplay){
   if(P.doc && P.doc.id !== doc.id) stop();
+  await maybeResplit(doc);
   P.doc = doc;
   P.idx = Math.min(doc.cursor || 0, doc.sentences.length - 1);
   P.mode = 'original';
